@@ -1,0 +1,4 @@
+interface:
+  display_name: "tiktok2shorts"
+  short_description: "바이럴 동물 후보를 검증하고 CTA·업로드 정보 쇼츠를 만듭니다"
+  default_prompt: "$tiktok2shorts로 바이럴 동물 후보를 찾아 비교하고, 선택 후 CTA와 YouTube 업로드 정보가 있는 쇼츠를 만들어줘."

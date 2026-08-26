@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "source": {
+    "path": "input/story.srt",
+    "sha256": "",
+    "permission_status": "unknown",
+    "permission_reference": ""
+  },
+  "assets": [],
+  "note": "로컬 렌더 성공은 게시 권리를 증명하지 않습니다."
+}

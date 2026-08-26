@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "collected_at": "2026-08-15T16:00:00+09:00",
+  "candidates": [
+    {
+      "id": "animal-rescue-001",
+      "platform": "tiktok",
+      "url": "https://www.tiktok.com/@example/video/0000000000000000000",
+      "creator": "example",
+      "collector": "permitted provider export",
+      "metrics_source_url": "https://www.tiktok.com/@example/video/0000000000000000000",
+      "published_at": "2026-08-15T08:00:00+09:00",
+      "category": "animals",
+      "animal": {
+        "species": "개 (소형견)",
+        "observable_behavior": "보호자 쪽으로 다가가 꼬리를 낮춘 채 손길을 기다리는 모습이 확인됩니다."
+      },
+      "title": "Example proven-viral animal rescue candidate",
+      "content_summary": "구조된 동물이 보호자에게 다시 다가오는 장면과 현장 반응이 담긴 검증용 예시입니다.",
+      "metrics": [
+        {
+          "collected_at": "2026-08-15T10:00:00+09:00",
+          "views": 820000,
+          "likes": 95000,
+          "comments": 4300,
+          "shares": 18500
+        },
+        {
+          "collected_at": "2026-08-15T12:00:00+09:00",
+          "views": 2480000,
+          "likes": 310000,
+          "comments": 14200,
+          "shares": 62800
+        },
+        {
+          "collected_at": "2026-08-15T14:00:00+09:00",
+          "views": 5820000,
+          "likes": 760000,
+          "comments": 31800,
+          "shares": 171000
+        }
+      ],
+      "korea_relevance_score": 72,
+      "youtube_korea_saturation_score": 26,
+      "format_fit": {
+        "whiteboard": {
+          "hook": {
+            "score": 17,
+            "evidence": "첫 장면에서 개와 보호자의 손이 분리된 윤곽으로 바로 보입니다."
+          },
+          "distinct_visual_beats": [
+            {
+              "time_reference": "0-2s",
+              "observed_action": "개가 문 앞에 멈춰 보호자 쪽을 바라봅니다."
+            },
+            {
+              "time_reference": "2-5s",
+              "observed_action": "개가 보호자 쪽으로 몇 걸음 다가옵니다."
+            },
+            {
+              "time_reference": "5-8s",
+              "observed_action": "개가 내민 손 앞에서 고개를 들어 올립니다."
+            },
+            {
+              "time_reference": "8-11s",
+              "observed_action": "개와 보호자의 손이 닿는 결과가 보입니다."
+            }
+          ],
+          "abstraction_payoff": {
+            "score": 18,
+            "evidence": "다가옴과 손이 닿는 결과가 단순한 위치 변화만으로 전달됩니다."
+          },
+          "composition": {
+            "score": 8,
+            "evidence": "개와 손이 배경에서 분리되고 복잡한 문자나 겹친 물체가 없습니다."
+          },
+          "disqualifiers": []
+        }
+      },
+      "rights": {
+        "permission_status": "unknown",
+        "permission_reference": ""
+      }
+    }
+  ]
+}

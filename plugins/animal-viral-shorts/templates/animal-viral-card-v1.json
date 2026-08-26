@@ -1,0 +1,49 @@
+{
+  "id": "animal-viral-card-v1",
+  "default_visual_preset": "observation-contrast-v1",
+  "supported_visual_presets": [
+    "animal-viral-card-v1",
+    "observation-contrast-v1"
+  ],
+  "width": 720,
+  "height": 1280,
+  "fps": 30,
+  "video_codec": "h264",
+  "audio_codec": "aac",
+  "colors": {
+    "background": "#F5F1EA",
+    "text": "#141414",
+    "accent": "#C94F3D"
+  },
+  "regions": {
+    "top_safe": [0, 0, 720, 56],
+    "headline": [0, 56, 720, 208],
+    "video": [0, 264, 720, 768],
+    "caption": [0, 1032, 720, 96],
+    "bottom_safe": [0, 1128, 720, 152],
+    "right_safe_width": 86
+  },
+  "caption_v2": {
+    "maximum_lines": 2,
+    "maximum_text_width": 540,
+    "styles": {
+      "question": {"font_size": 46, "accent_bar": true},
+      "buildup": {"font_size": 44, "progress_line": true},
+      "turn": {"font_size": 48, "background": "#ECD8D2"},
+      "payoff": {"font_size": 52, "background": "#141414", "text": "#F5F1EA"}
+    },
+    "one_emphasis_phrase_per_scene": true,
+    "emphasis_color": "#C94F3D",
+    "visible_act_labels": false
+  },
+  "audio": {
+    "source_audio_primary": true,
+    "bgm": "no-vocal",
+    "tts": false,
+    "narration": false,
+    "target_lufs": -15,
+    "true_peak_dbfs": -1,
+    "scene_aware_music": true,
+    "draft_approval_required": true
+  }
+}

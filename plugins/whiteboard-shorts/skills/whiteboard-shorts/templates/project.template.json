@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "title": "",
+  "slug": "",
+  "created_at": "",
+  "updated_at": "",
+  "timezone": "Asia/Seoul",
+  "status": "planned",
+  "production_mode": "whiteboard-animation",
+  "distribution_mode": "local_review",
+  "source_kind": "local_srt",
+  "source_srt": {
+    "path": "input/story.srt",
+    "sha256": ""
+  },
+  "scene_plan_path": "scene-plan.json",
+  "render_profile": {
+    "preview": {"width": 540, "height": 960, "frame_rate": 15},
+    "final": {"width": 1080, "height": 1920, "frame_rate": 30},
+    "video_codec": "h264",
+    "audio": "none"
+  },
+  "approvals": {
+    "scene_plan_reviewed": false,
+    "images_reviewed": false,
+    "annotations_reviewed": false,
+    "rights_reviewed": false,
+    "draft_reviewed": false
+  }
+}

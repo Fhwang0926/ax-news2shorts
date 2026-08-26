@@ -1,0 +1,40 @@
+{
+  "id": "observation-contrast-v1",
+  "base_template_id": "animal-viral-card-v1",
+  "width": 720,
+  "height": 1280,
+  "fps": 30,
+  "regions": {
+    "top_safe": [0, 0, 720, 56],
+    "headline": [0, 56, 720, 208],
+    "video": [0, 264, 720, 768],
+    "caption": [0, 1032, 720, 96],
+    "bottom_safe": [0, 1128, 720, 152],
+    "right_safe_width": 86
+  },
+  "headline": {
+    "fixed_two_lines": true,
+    "visible_from_first_frame": true,
+    "accent_color": "#C43C2D",
+    "contrast_marker": "#F2C94C"
+  },
+  "observation_card": {
+    "subject_label_required": true,
+    "subject_label_length": [2, 12],
+    "subject_label_source": "reviewed observation subject",
+    "action_caption_maximum_lines": 2,
+    "dialogue_or_inferred_emotion_allowed": false
+  },
+  "cadence": {
+    "ordinary_scene_maximum_seconds": 3.0,
+    "payoff_scene_maximum_seconds": 4.0,
+    "final_hold_seconds": [0.5, 1.0]
+  },
+  "copy_boundary": {
+    "copy_reference_logo": false,
+    "copy_reference_font": false,
+    "copy_reference_caption": false,
+    "copy_reference_music": false,
+    "copy_reference_scene_sequence": false
+  }
+}

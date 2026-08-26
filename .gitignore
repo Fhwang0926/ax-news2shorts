@@ -1,0 +1,8 @@
+.DS_Store
+.env
+__pycache__/
+*.pyc
+outputs/
+/projects/
+plugins/news2shorts/candidates.json
+plugins/whiteboard-shorts/vendor/srt-whiteboard-animation/.venv/

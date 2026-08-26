@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "generated_at": "2026-08-24T12:00:00+09:00",
+  "selection_required": true,
+  "best_candidate_id": "story-anecdote-01",
+  "best_candidate_reason": "국 한 그릇이 가족의 마음이었다는 반전과 따뜻한 회수가 분명합니다.",
+  "candidates": [
+    {
+      "id": "story-anecdote-01",
+      "mode": "anecdote",
+      "title": "매일 남겨 둔 국 한 그릇",
+      "selection_reason": "직접 제보를 비식별화한 따뜻한 가족 사연으로 조리 영상과 자연스럽게 연결됩니다.",
+      "emotional_arc": "서운함 → 거리감 → 발견 → 감사",
+      "story_score": {
+        "total": 82,
+        "hook_strength": 16,
+        "emotional_arc": 18,
+        "turn_and_payoff": 18,
+        "food_visual_fit": 17,
+        "evidence_and_safety": 13,
+        "reason": "가족의 마음을 음식으로 회수하는 감정선은 좋지만 제보형이라 사실 확인 범위가 제한됩니다."
+      },
+      "sensitive_topics": [],
+      "sources": [],
+      "claims": [],
+      "anecdote": {
+        "origin_kind": "submitted",
+        "consent_status": "permission_confirmed",
+        "disclosure": "제보 사연을 바탕으로 인물과 상황을 재구성했습니다.",
+        "identity_fields_removed": ["이름", "지역", "직장", "정확한 날짜"],
+        "fictionalized_fields": ["대화 순서", "음식 종류"]
+      },
+      "beats": [
+        {
+          "beat": "hook",
+          "caption": "냉장고에 늘 남아 있던 국",
+          "narration": "야근하고 돌아오면 냉장고에는 늘 국 한 그릇이 남아 있었습니다."
+        },
+        {
+          "beat": "context",
+          "caption": "말이 줄어든 가족",
+          "narration": "바쁘다는 이유로 가족과 나누는 말은 점점 줄어들었죠."
+        },
+        {
+          "beat": "conflict",
+          "caption": "당연하다고 생각한 한 끼",
+          "narration": "따뜻한 밥도 언제나 있는 당연한 일이라고만 생각했습니다."
+        },
+        {
+          "beat": "rehook",
+          "caption": "그날은 국이 없었습니다",
+          "narration": "그러던 어느 날, 처음으로 냉장고가 텅 비어 있었습니다."
+        },
+        {
+          "beat": "turn",
+          "caption": "뒤늦게 보인 짧은 쪽지",
+          "narration": "식탁 위에는 오늘은 네가 잘 챙겨 먹으라는 짧은 쪽지만 남아 있었고요."
+        },
+        {
+          "beat": "payoff",
+          "caption": "사랑은 매일 데워 둔 마음",
+          "narration": "그제야 알았습니다. 그 한 그릇은 매일 데워 둔 가족의 마음이었다는 걸요."
+        }
+      ]
+    }
+  ]
+}

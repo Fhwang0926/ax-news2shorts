@@ -1,0 +1,38 @@
+{
+  "name": "animal-viral-shorts",
+  "version": "0.5.0+codex.20260825132723",
+  "description": "Research proven-viral animal sources with detailed story flow, appeal, adaptation notes, and limitations, then render an approved Korean Short with an evidence-grounded observation-contrast visual preset, timed Korean-style source-caption adaptations, scene-matched no-vocal SFX, music, a subscribe/like CTA tail, and a creator-neutral public YouTube description.",
+  "author": {
+    "name": "AX YouTube Shorts"
+  },
+  "skills": "./skills/",
+  "keywords": [
+    "animal",
+    "viral",
+    "tiktok",
+    "youtube-shorts",
+    "korean",
+    "local-video",
+    "source-audio",
+    "bgm",
+    "sound-effects",
+    "caption-translation",
+    "observation-contrast"
+  ],
+  "interface": {
+    "displayName": "Animal Viral Shorts",
+    "shortDescription": "\uad00\ucc30 \ub300\uc0c1\u00b7\ud589\ub3d9 \ub300\ube44\uc640 \ud55c\uad6d\uc5b4 \uc758\uc5ed\u00b7\ud6a8\uacfc\uc74c\uc774 \uc788\ub294 \ub3d9\ubb3c \uc1fc\uce20\ub97c \ub9cc\ub4ed\ub2c8\ub2e4.",
+    "longDescription": "TikTok\uacfc YouTube Shorts\uc5d0\uc11c \uacf5\uac1c \uc9c0\ud45c\uc640 \uc2e4\uc81c \ud589\ub3d9\uc774 \ud655\uc778\ub41c \ub3d9\ubb3c \uc6d0\ubcf8\uc744 \ucd5c\ub300 3\uac1c \ube44\uad50\ud558\uac70\ub098 \uc0ac\uc6a9\uc790\uac00 \uc81c\uacf5\ud55c URL\u00b7\ub85c\uceec \uc601\uc0c1\uc744 \ub4f1\ub85d\ud569\ub2c8\ub2e4. \uc0ac\uc6a9\uc790\uac00 \uc18c\uc2a4\ub97c \uace0\ub978 \ub4a4 \uc11c\ub85c \ub2e4\ub978 \uc7ac\ubbf8 \uc7a5\uce58\uc640 \uae30\uc2b9\uc804\uacb0, \uad00\ucc30 \ub300\uc0c1\u00b7\ud589\ub3d9 \ub300\ube44 \uce74\ub4dc, \uc7a5\uba74\ubcc4 \uc74c\uc545 \ud050\uac00 \uc788\ub294 \uc2a4\ud1a0\ub9ac 3\uc548\uc744 \ube44\uad50\ud569\ub2c8\ub2e4. \uc120\ud0dd\ub41c \uc774\uc57c\uae30\ub9cc 59.5\ucd08 \uc774\ud558\uc758 720x1280 \uac80\ud1a0\uc6a9 MP4\ub85c \ub80c\ub354\ub9c1\ud558\uace0, \uc0ac\uc6a9\uc790\uac00 \uc7ac\ubbf8\uc640 \uc74c\uc545 \uc801\ud569\uc131\uc744 \ubaa8\ub450 \uc2b9\uc778\ud55c \ub4a4 \ucd5c\uc885\ubcf8\uc744 \ub9cc\ub4ed\ub2c8\ub2e4. \uad8c\ub9ac \ubd88\uba85 \uc18c\uc2a4\ub294 \ub85c\uceec \uac80\ud1a0\uc6a9\uc73c\ub85c\ub9cc \uc720\uc9c0\ud558\uba70 TTS, \uc5c5\ub85c\ub4dc, DB, \ubcc4\ub3c4 \uc11c\ubc84\ub294 \ud3ec\ud568\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4.",
+    "developerName": "AX YouTube Shorts",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "TikTok\uacfc YouTube Shorts\uc5d0\uc11c \uac80\uc99d\ub41c \ubc14\uc774\ub7f4 \ub3d9\ubb3c \ud6c4\ubcf4\ub97c \ucd5c\ub300 3\uac1c \ube44\uad50\ud574\uc918.",
+      "\uc774 \ub3d9\ubb3c \uc601\uc0c1\uc5d0\uc11c \uc2e4\uc81c \ud589\ub3d9\uc5d0 \uadfc\uac70\ud55c \uc11c\ub85c \ub2e4\ub978 \uc1fc\uce20 \uc2a4\ud1a0\ub9ac 3\uc548\uc744 \ub9cc\ub4e4\uc5b4\uc918.",
+      "\uc120\ud0dd\ud55c \ub3d9\ubb3c \uc2a4\ud1a0\ub9ac\ub97c \uc6d0\ubcf8\uc74c, \ube44\ubcf4\uceec BGM\u00b7\ud6a8\uacfc\uc74c, \uc7ac\ubbf8\uc788\ub294 \ud55c\uad6d\uc5b4 \uc6d0\ubb38 \uc758\uc5ed\uc774 \uc788\ub294 720x1280 \ub85c\uceec MP4\ub85c \ub9cc\ub4e4\uc5b4\uc918."
+    ]
+  }
+}

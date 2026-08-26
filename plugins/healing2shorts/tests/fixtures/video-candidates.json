@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "generated_at": "2026-08-24T12:00:00+09:00",
+  "selection_required": true,
+  "candidates": [
+    {
+      "id": "video-01",
+      "platform": "douyin",
+      "source_url": "https://www.douyin.com/video/fixture-food-video",
+      "creator": "Fixture Food Creator",
+      "scene_summary": "재료 손질, 끓이기, 완성 접시가 순서대로 이어지는 세로 조리 영상",
+      "selection_reason": "여섯 개 스토리 비트에 맞춰 서로 다른 조리 단계를 배치할 수 있습니다.",
+      "collected_at": "2026-08-24T12:00:00+09:00",
+      "watermark_present": false,
+      "visual_text_status": "none",
+      "visual_text_review_note": "합성 fixture에는 원본 문자 오버레이가 없습니다.",
+      "rights_status": "negotiation_pending",
+      "recommended_segments": [],
+      "text_free_segments": []
+    }
+  ]
+}

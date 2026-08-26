@@ -1,0 +1,92 @@
+{
+  "name": "news2shorts-local",
+  "interface": {
+    "displayName": "news2shorts Local"
+  },
+  "plugins": [
+    {
+      "name": "news2shorts",
+      "source": {
+        "source": "local",
+        "path": "./plugins/news2shorts"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "tiktok2shorts",
+      "source": {
+        "source": "local",
+        "path": "./plugins/tiktok2shorts"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "whiteboard-shorts",
+      "source": {
+        "source": "local",
+        "path": "./plugins/whiteboard-shorts"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "animal-viral-shorts",
+      "source": {
+        "source": "local",
+        "path": "./plugins/animal-viral-shorts"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "healing2shorts",
+      "source": {
+        "source": "local",
+        "path": "./plugins/healing2shorts"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "s-finder",
+      "source": {
+        "source": "local",
+        "path": "./plugins/s-finder"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "shorts-studio",
+      "source": {
+        "source": "local",
+        "path": "./plugins/shorts-studio"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

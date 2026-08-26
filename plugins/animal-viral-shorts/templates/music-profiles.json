@@ -1,0 +1,33 @@
+{
+  "profiles": [
+    "playful",
+    "tension",
+    "tender",
+    "relief",
+    "gentle"
+  ],
+  "default_mode": "synthetic_score_v2",
+  "vocals": false,
+  "source_audio_primary": true,
+  "bgm_below_source_db": 15,
+  "bpm": {
+    "playful": 118,
+    "tension": 102,
+    "tender": 84,
+    "relief": 106,
+    "gentle": 88
+  },
+  "act_defaults": {
+    "setup": {"energy": 0.28, "cue": "intro"},
+    "build": {"energy": 0.55, "cue": "build"},
+    "turn": {"energy": 0.32, "cue": "drop"},
+    "payoff": {"energy": 0.86, "cue": "impact"}
+  },
+  "source_audio_duck_db": {
+    "high": 20,
+    "normal": 15,
+    "low": 12
+  },
+  "fade_in_seconds": 0.08,
+  "fade_out_seconds": 0.3
+}

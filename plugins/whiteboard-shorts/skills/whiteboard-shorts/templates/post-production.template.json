@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "captions": {
+    "enabled": false,
+    "style": "viral-punch",
+    "items": []
+  },
+  "music": {
+    "enabled": false,
+    "mode": "licensed_catalog",
+    "vocals": false,
+    "volume": 0.85,
+    "fade_in_seconds": 0.04,
+    "fade_out_seconds": 0.3,
+    "asset_path": "assets/audio/monkeys-spinning-monkeys.mp3",
+    "track_id": "monkeys-spinning-monkeys",
+    "title": "Monkeys Spinning Monkeys",
+    "artist": "Kevin MacLeod",
+    "bpm": 144,
+    "start_seconds": 0.0,
+    "loudness_target_lufs": -14.0,
+    "true_peak_db": -1.5,
+    "segments": [],
+    "license_name": "Creative Commons Attribution 4.0 International",
+    "license_url": "https://creativecommons.org/licenses/by/4.0/",
+    "source_page": "https://incompetech.com/music/royalty-free/?isrc=USUAN1400011",
+    "attribution": "Monkeys Spinning Monkeys by Kevin MacLeod is licensed under CC BY 4.0. https://creativecommons.org/licenses/by/4.0/",
+    "rights": {
+      "permission_status": "licensed",
+      "note": "제작자 공식 파일을 CC BY 4.0 조건과 필수 크레딧으로 사용합니다."
+    }
+  },
+  "motion": {
+    "enabled": false,
+    "items": []
+  }
+}

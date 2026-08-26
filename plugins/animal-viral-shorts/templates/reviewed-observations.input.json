@@ -1,0 +1,25 @@
+{
+  "summary": "",
+  "species": "",
+  "subjects": [],
+  "relationship_roles": [],
+  "observed_behaviors": [],
+  "observations": [],
+  "sensitive": {
+    "is_sensitive": false,
+    "categories": [],
+    "welfare_note": "",
+    "fact_sources": []
+  },
+  "source_caption": {
+    "detected": false,
+    "language": "",
+    "regions": []
+  },
+  "protected_regions": {
+    "watermarks": [],
+    "animal_faces": [],
+    "human_faces": []
+  },
+  "reviewer_note": ""
+}

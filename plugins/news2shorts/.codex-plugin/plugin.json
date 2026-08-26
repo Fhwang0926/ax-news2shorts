@@ -1,0 +1,32 @@
+{
+  "name": "news2shorts",
+  "version": "0.36.3+codex.20260825221000",
+  "description": "Turn verified citizen-impact news into a continuous quick-reveal Short with a branded 뉴스한면 intro, ten-second rehook contract, and rights-reviewed thumbnail.",
+  "author": {
+    "name": "AX YouTube Shorts"
+  },
+  "skills": "./skills/",
+  "keywords": [
+    "news",
+    "youtube",
+    "shorts",
+    "video",
+    "korean"
+  ],
+  "interface": {
+    "displayName": "news2shorts",
+    "shortDescription": "\ub274\uc2a4\ub97c \uc7ac\ubbf8\uc788\uace0 \uc9d1\uc911\ub3c4 \ub192\uc740 \uac80\uc99d\ud615 \uc1fc\uce20\ub85c \uc81c\uc791\ud569\ub2c8\ub2e4.",
+    "longDescription": "NAVER API 사용 여부와 관계없이 NAVER News를 오늘의 한국 뉴스 후보 발굴 범위에 포함하고, 정치·공공 책임과 생활비·주거·안전·건강·교육·노동·권리·개인정보·공공서비스 영향을 원문과 독립 출처로 교차검증합니다. 서로 다른 공개 커뮤니티의 제목은 같은 검증 뉴스가 관찰되는지 확인하는 작은 발견 신호로만 사용하며 사실이나 국민 여론으로 해석하지 않습니다. 모든 새 제작은 실제 뉴스한면 채널 로고와 고정 슬로건이 들어간 3.15초 인트로로 시작하고, 12~35초 quick-reveal과 continuous-flow만 사용합니다. 첫 장면을 2.5초 이내로 제한하고 고정 인트로를 포함한 10초 안에 검증된 부분 반전이 시작되도록 하며, 사실의 조건은 숨기지 않은 채 결론의 한 답만 뒤로 미룹니다. 본문 전체를 Typecast 한 번으로 읽고, 구절에 맞춰 권리 확인된 실제 사진과 근거 화면을 하드 컷으로 교체합니다. 일반 비민감 뉴스는 권리와 비당사자 맥락을 확인한 별도 진행자 이미지가 있을 때 진행자형 썸네일을 사용하고, 민감 뉴스나 안전한 진행자 자산이 없으면 직접 근거 합성으로 전환합니다. 실제 지역명, 중앙 실명 인물의 사진 권리·사생활 상태, 확인된 행위·누락과 시민 피해의 연결을 기록하고, 구체적인 시민 질문에서 시작해 검증된 반전과 답으로 끝냅니다. 별도 질문형 썸네일, 권리 기록, 720x1280 MP4, CapCut Desktop/Web·Vrew 호환 편집 패키지와 링크 없는 YouTube 업로드 패키지를 제공합니다.",
+    "developerName": "AX YouTube Shorts",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "오늘 네이버 뉴스 후보를 검증하고 quick-reveal과 continuous-flow로 쇼츠를 만들어줘.",
+      "이 뉴스 링크로 quick-reveal 화면과 한 호흡 continuous-flow 음성을 적용한 30초 쇼츠를 만들어줘.",
+      "\uc774 \ud504\ub85c\uc81d\ud2b8\uc758 \ucd9c\ucc98\uc640 \uc774\ubbf8\uc9c0\u00b7\uc601\uc0c1 \uad8c\ub9ac\ub97c \uac80\uc0ac\ud574\uc918."
+    ]
+  }
+}

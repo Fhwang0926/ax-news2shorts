@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "asset_id": "news-hanmyeon-channel",
+  "file": "brand-intro-news-hanmyeon.mp4",
+  "sha256": "6c3d9ee55449eec23ab4e497d433b8c86e9f2faddd46872d951c18fc1ba34ce2",
+  "duration_seconds": 3.15,
+  "width": 720,
+  "height": 1280,
+  "has_audio": true,
+  "source_type": "user-provided-channel-brand-composite",
+  "source_assets": [
+    {
+      "file": "brand-intro-oldman-korea-map.mp4",
+      "role": "base-intro-video"
+    },
+    {
+      "file": "news-hanmyeon-channel-logo.png",
+      "role": "channel-logo",
+      "sha256": "19259d74d1301557b4d3ee2b037edbbfb6f3a34df1d27b5521ae7ec2ae2de49c"
+    }
+  ],
+  "channel_name": "뉴스한면",
+  "slogan": [
+    "세상의 이슈를 모아",
+    "우리 삶의 문제를 짚습니다"
+  ],
+  "edits": [
+    "placed the user-provided channel logo without redrawing it",
+    "added the fixed two-line Korean channel slogan",
+    "preserved the base intro's embedded audio"
+  ],
+  "usage_scope": "Default recurring news2shorts intro for the user's 뉴스한면 channel",
+  "rights_note": "The user supplied the channel logo and directed recurring plugin use; publication and monetization rights remain the user's responsibility."
+}

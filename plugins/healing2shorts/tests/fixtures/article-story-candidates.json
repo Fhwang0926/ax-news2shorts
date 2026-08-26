@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "generated_at": "2026-08-24T12:00:00+09:00",
+  "selection_required": true,
+  "best_candidate_id": "story-article-01",
+  "best_candidate_reason": "음식 영상과 직접 연결되는 도시락 훅과 따뜻한 회수가 가장 선명합니다.",
+  "candidates": [
+    {
+      "id": "story-article-01",
+      "mode": "article",
+      "title": "마지막 도시락에 적힌 한마디",
+      "selection_reason": "일상적인 친절이 관계를 회복하는 감정선으로 음식 영상과 잘 맞습니다.",
+      "emotional_arc": "낯섦 → 오해 → 작은 배려 → 안도",
+      "story_score": {
+        "total": 85,
+        "hook_strength": 18,
+        "emotional_arc": 16,
+        "turn_and_payoff": 17,
+        "food_visual_fit": 19,
+        "evidence_and_safety": 15,
+        "reason": "도시락과 메모가 훅과 반전을 만들고 음식 조리 장면과 자연스럽게 이어집니다."
+      },
+      "sensitive_topics": [],
+      "sources": [
+        {
+          "id": "source-original",
+          "kind": "original",
+          "publisher": "Fixture Local News",
+          "url": "https://example.com/healing-original",
+          "published_at": "2026-08-23T09:00:00+09:00"
+        },
+        {
+          "id": "source-independent",
+          "kind": "independent",
+          "publisher": "Fixture Daily",
+          "url": "https://example.org/healing-corroboration",
+          "published_at": "2026-08-23T11:00:00+09:00"
+        }
+      ],
+      "claims": [
+        {
+          "id": "claim-01",
+          "text": "한 주민이 이웃에게 도시락을 건넸다.",
+          "source_ids": ["source-original", "source-independent"]
+        },
+        {
+          "id": "claim-02",
+          "text": "도시락에는 짧은 안부 메모가 함께 있었다.",
+          "source_ids": ["source-original"]
+        },
+        {
+          "id": "claim-03",
+          "text": "이후 두 사람은 정기적으로 안부를 나눴다.",
+          "source_ids": ["source-original", "source-independent"]
+        }
+      ],
+      "anecdote": {},
+      "beats": [
+        {
+          "beat": "hook",
+          "caption": "문 앞에 놓인 마지막 도시락",
+          "narration": "매일 같은 시간, 문 앞에 도시락 하나가 놓였습니다."
+        },
+        {
+          "beat": "context",
+          "caption": "인사도 없던 두 이웃",
+          "narration": "서로 이름도 몰랐던 두 이웃은 늘 조용히 스쳐 지나갔죠."
+        },
+        {
+          "beat": "conflict",
+          "caption": "어느 날 끊긴 발걸음",
+          "narration": "그런데 며칠째 한 집의 불이 켜지지 않았습니다."
+        },
+        {
+          "beat": "rehook",
+          "caption": "도시락 아래 작은 메모",
+          "narration": "걱정이 된 이웃은 따뜻한 밥과 짧은 메모를 남겼습니다."
+        },
+        {
+          "beat": "turn",
+          "caption": "잘 먹었다는 답장",
+          "narration": "다음 날 빈 그릇 아래에는 잘 먹었다는 답장이 놓여 있었고요."
+        },
+        {
+          "beat": "payoff",
+          "caption": "따뜻함은 먼저 말을 건넵니다",
+          "narration": "가끔 사람을 살리는 건 거창한 말보다 따뜻한 한 끼였습니다."
+        }
+      ]
+    }
+  ]
+}

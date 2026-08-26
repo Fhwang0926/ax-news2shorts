@@ -1,0 +1,33 @@
+{
+  "name": "whiteboard-shorts",
+  "version": "0.6.0+codex.20260821",
+  "description": "Render a source-grounded whiteboard Short with five-beat Korean captions, verified music, a subscribe/like CTA tail, and a YouTube upload package.",
+  "author": {
+    "name": "AX YouTube Shorts"
+  },
+  "skills": "./skills/",
+  "keywords": [
+    "whiteboard",
+    "tiktok",
+    "srt",
+    "youtube",
+    "shorts",
+    "animation"
+  ],
+  "interface": {
+    "displayName": "Whiteboard Shorts",
+    "shortDescription": "TikTok 동물을 반전 자막·검증 음원·줌 손그림 쇼츠로 만듭니다.",
+    "longDescription": "원본 바이럴 성과와 별도로 화이트보드 훅, 서로 다른 행동, 단순화 후 결말, 윤곽·구도를 통과한 TikTok2Shorts 후보만 가져옵니다. 실제 프레임 검토와 장면 역할을 확인하고, 한국어 장면 계획과 출처 근거를 보존합니다. 확인한 9:16 선화 이미지와 좌표 annotation에 훅·재훅·반전이 이어지는 짧은 장면 자막, 실제 짧은 영상 사용 근거와 라이선스를 검증한 무보컬 음원 또는 안전한 생성 음원, 필요한 장면 줌을 더해 로컬 화이트보드 영상을 렌더링합니다.",
+    "developerName": "AX YouTube Shorts",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "TikTok에서 바이럴 성과와 화이트보드 적합도를 모두 통과한 후보만 찾아 비교하고, 내가 선택하면 실제 프레임 사전 검사 후 프로젝트로 가져와줘.",
+      "이 TikTok2Shorts 프로젝트를 장면 근거와 권리 기록을 보존해 화이트보드 프로젝트로 가져와줘.",
+      "가져온 TikTok 장면을 훅·재훅·반전 자막, 검증된 바이럴 음원, 필요한 줌을 적용해 화이트보드 애니메이션으로 렌더링해줘."
+    ]
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "verified_at": "2026-08-17",
+  "tracks": [
+    {
+      "id": "monkeys-spinning-monkeys",
+      "title": "Monkeys Spinning Monkeys",
+      "artist": "Kevin MacLeod",
+      "isrc": "USUAN1400011",
+      "bpm": 144,
+      "duration_seconds": 125.0743,
+      "fit": ["animal-comedy", "mistake", "awkward-observation", "reveal"],
+      "source_page": "https://incompetech.com/music/royalty-free/?isrc=USUAN1400011",
+      "download_url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Monkeys%20Spinning%20Monkeys.mp3",
+      "license_name": "Creative Commons Attribution 4.0 International",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "Monkeys Spinning Monkeys by Kevin MacLeod is licensed under CC BY 4.0. https://creativecommons.org/licenses/by/4.0/",
+      "known_file_sha256": "a5bb345c23849ad0786aa0bc5157a9f2d4039660fe00282e55754d475f36dc14",
+      "usage_evidence": {
+        "url": "https://www.kpbs.org/news/national/2024/09/25/how-a-catchy-tune-became-the-soundtrack-to-tiktoks-silliest-videos",
+        "note": "동물과 엉뚱한 상황을 포함한 수백만 개의 TikTok에 사용되고 수십억 회 재생된 대표적인 짧은 영상 배경음으로 보도됨"
+      }
+    }
+  ]
+}

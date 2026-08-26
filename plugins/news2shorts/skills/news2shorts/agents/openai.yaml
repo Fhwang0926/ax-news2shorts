@@ -1,0 +1,4 @@
+interface:
+  display_name: "news2shorts"
+  short_description: "퀵리빌 화면과 한 호흡 음성으로 뉴스 쇼츠를 만듭니다"
+  default_prompt: "Use $news2shorts to cross-check the news, use only quick-reveal with continuous-flow for new work, open the first screen and narration with a sourced question, move one uninterrupted narration across clause-timed rights-safe visuals, answer the question through evidence and one clear reversal, and create a separate curiosity-led question thumbnail with the final video."

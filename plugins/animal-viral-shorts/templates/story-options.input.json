@@ -1,0 +1,45 @@
+{
+  "schema_version": "2.0",
+  "stories": [],
+  "story_contract": {
+    "visual_preset_source": "project.template.visual_preset",
+    "new_project_default_visual_preset": "observation-contrast-v1",
+    "required_count": 3,
+    "required_acts": ["setup", "build", "turn", "payoff"],
+    "duration_seconds": {
+      "maximum": 59.5,
+      "archetype_ranges_are_guides_only": true
+    },
+    "required_story_fields": [
+      "viewer_question",
+      "fun_mechanism",
+      "narrative_arc",
+      "score",
+      "fun_score"
+    ],
+    "required_beat_fields": [
+      "act",
+      "caption_style",
+      "emphasis_phrase",
+      "music_cue",
+      "music_mood",
+      "source_audio_priority"
+    ],
+    "observation_contrast_beat_contract": {
+      "required_field": "subject_label",
+      "subject_label_length": [2, 12],
+      "subject_label_must_match_reviewed_subject": true,
+      "ordinary_scene_maximum_seconds": 3.0,
+      "payoff_scene_maximum_seconds": 4.0,
+      "dialogue_or_emotion_labels_allowed": false
+    },
+    "fun_score_components": {
+      "hook_curiosity": 15,
+      "build_escalation": 20,
+      "rehook_strength": 15,
+      "turn_surprise": 20,
+      "payoff_satisfaction": 20,
+      "replay_comment_potential": 10
+    }
+  }
+}

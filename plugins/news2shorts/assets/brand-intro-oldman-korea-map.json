@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "asset_id": "oldman-korea-map",
+  "file": "brand-intro-oldman-korea-map.mp4",
+  "sha256": "46416574706e5418e615e4fc64fdd3407b08f6f24f7f68c2c2e65d24352d884c",
+  "duration_seconds": 3.15,
+  "width": 720,
+  "height": 1280,
+  "has_audio": true,
+  "source_type": "user-provided-video",
+  "source_filename": "올드맨_원본.mp4",
+  "edits": [
+    "trimmed to source range 0.35-3.5 seconds",
+    "removed the early number marker",
+    "replaced the checkerboard area with a blurred South Korea map background"
+  ],
+  "usage_scope": "Recurring news2shorts intro requested by the user",
+  "rights_note": "The user directed recurring plugin use; publication and monetization rights remain the user's responsibility."
+}

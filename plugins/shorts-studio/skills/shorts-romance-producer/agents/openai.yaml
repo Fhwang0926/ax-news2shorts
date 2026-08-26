@@ -1,0 +1,6 @@
+interface:
+  display_name: "Shorts Romance Producer"
+  short_description: "승인된 대본과 장면으로 한국어 2인극 쇼츠를 제작합니다."
+  default_prompt: "Use $shorts-romance-producer to render my approved Korean two-person romance storyboard."
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,106 @@
+{
+  "version": 13,
+  "title": "",
+  "slug": "",
+  "topic": "",
+  "source_url": "",
+  "timezone": "Asia/Seoul",
+  "created_at": "",
+  "updated_at": "",
+  "status": "initialized",
+  "target_duration_seconds": 30,
+  "sensitive_topic": false,
+  "delivery_mode": "continuous-flow",
+  "format_selection": {
+    "mode": "auto",
+    "selected": "",
+    "reason": "",
+    "confidence": "medium"
+  },
+  "narration_voice": {
+    "mode": "auto",
+    "voice": ""
+  },
+  "shorts_profile": {
+    "hook_type": "issue-tension",
+    "hook": "",
+    "hook_stake": "",
+    "issue_focus": "",
+    "viewer_stake": "",
+    "tension_question": "",
+    "visual_attention_device": "",
+    "visual_attention_scene_id": "",
+    "visual_attention_reason": "",
+    "open_loop": "",
+    "midpoint_rehook": "",
+    "early_rehook_scene_id": "",
+    "withheld_detail": "",
+    "truth_guard": "",
+    "payoff": "",
+    "loop_close": ""
+  },
+  "editorial_grounding": {
+    "locations_reviewed": false,
+    "locations": [],
+    "people_reviewed": false,
+    "people": [],
+    "accountability": {
+      "mode": "not_applicable",
+      "trigger": "",
+      "consequence": "",
+      "claim_ids": [],
+      "scene_ids": [],
+      "reason": ""
+    }
+  },
+  "visual_style": {
+    "template": "quick-reveal",
+    "brand_name": "",
+    "accent_color": "#FFF200",
+    "display_headline": "",
+    "headline_highlight": "",
+    "screen_copy_mode": "noun-phrases",
+    "show_fact_stack_index": false,
+    "show_payoff_label": true,
+    "payoff_panel_style": "editorial-card",
+    "show_source_label": true
+  },
+  "visual_sourcing": {
+    "web_search_enabled": true,
+    "prefer_collected_assets": true,
+    "generation_fallback": true,
+    "real_news_photo_required": true,
+    "visual_quality_review_required": true,
+    "named_politician_photo_priority": true,
+    "company_visuals": {
+      "mentions_reviewed": false,
+      "companies": []
+    },
+    "max_generated_scene_ratio": 0.4,
+    "generated_image_size": "720x1280",
+    "generated_style": "editorial-realism-or-pictogram"
+  },
+  "brand_intro": {
+    "enabled": true,
+    "asset": "news-hanmyeon-channel",
+    "transition": "fadeblack",
+    "transition_duration": 0.25
+  },
+  "cta_tail": {
+    "enabled": true,
+    "duration": 4.0,
+    "headline": "빠른 소식 계속",
+    "prompt": "구독 · 좋아요",
+    "narration": "구독과 좋아요 누르면, 빠른 소식 전해드릴게요.",
+    "comment_headline": "여러분의 판단",
+    "comment_prompt": "댓글로 한마디",
+    "comment_narration": "여러분의 생각을 댓글로 남겨주세요.",
+    "voice_enabled": true,
+    "style": "common-dark-yellow"
+  },
+  "approvals": {
+    "editorial_reviewed": false,
+    "rights_reviewed": false,
+    "synthetic_disclosure_reviewed": false
+  }
+}

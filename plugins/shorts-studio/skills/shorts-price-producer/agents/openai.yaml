@@ -1,0 +1,6 @@
+interface:
+  display_name: "Shorts Price Producer"
+  short_description: "제공된 가격 근거를 계산해 생활비 쇼츠로 제작합니다."
+  default_prompt: "Use $shorts-price-producer to turn my approved price evidence into a Korean breakdown Short."
+policy:
+  allow_implicit_invocation: true

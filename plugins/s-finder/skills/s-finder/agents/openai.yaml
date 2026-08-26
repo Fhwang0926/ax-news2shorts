@@ -1,0 +1,4 @@
+interface:
+  display_name: "쇼츠 후보 찾기"
+  short_description: "해외 바이럴 원본을 출처와 한국 중복 근거로 비교합니다."
+  default_prompt: "Use $s-finder to find and compare up to ten current overseas video candidates from the last 48 hours for Korean explainer Shorts."

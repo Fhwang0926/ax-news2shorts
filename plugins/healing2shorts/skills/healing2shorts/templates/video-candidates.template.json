@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "generated_at": "",
+  "selection_required": true,
+  "ranking_policy": "Prefer none, then non_chinese_only, unknown, and chinese_present only with six text-free segments.",
+  "candidates": []
+}
