@@ -1,0 +1,9 @@
+{
+  "korean_senior_storytoon_v1": {
+    "prompt": "Korean webtoon illustration, realistic Korean facial features, warm emotional lighting, clean line art, soft shading, cinematic vertical composition, contemporary Korean environment, respectful depiction of older adults, consistent character design, no text inside image",
+    "negative_prompt": "deformed hands, extra fingers, missing fingers, duplicate person, distorted face, different clothes, different hairstyle, wrong age, childlike face, text, letters, logo, watermark, low resolution",
+    "font": "Apple SD Gothic Neo",
+    "subtitle_font_size": 86,
+    "subtitle_margin_v": 330
+  }
+}

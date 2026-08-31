@@ -6,22 +6,38 @@
 2. `licensed`: license and attribution requirements are known and compatible with the intended use.
 3. `official`: an official source provides explicit reusable media terms.
 4. `owned`: supplied by the user with a recorded assertion of rights.
+5. `unreviewed`: a publicly reachable source image retained only for a local editorial draft while permission remains `unknown` or `review_required`.
 
 Public availability is not permission. A NAVER News thumbnail, article image, social post, press photo, embedded video, broadcast clip, or search result must not be used without a separate rights basis.
 
+`unreviewed` never means copyright does not apply. It requires the canonical source page, creator or publisher when known, retrieval time, exact scene relevance, `approved: false`, and `local_review_only: true`. It may be transformed into a whiteboard review scene only after `whiteboard_text_free_reviewed: true`; the derivative inherits the original permission status. It does not count toward the approved real-media ratio and clean-final validation must reject it.
+
+`collect-internet-visual` may fetch a selected public HTTPS image for this local-review path. Require a separate canonical source page, reject private or non-HTTPS hosts and non-image responses, enforce the file-size and pixel limits, preserve the final download URL and SHA-256, and never send browser credentials or remove a watermark. The operator remains responsible for adding permission evidence before publication.
+
 ## Web search workflow
 
-1. Search for each distinct image or footage need before generating. Check owned media, official libraries with explicit reuse terms, public-domain collections, and asset-specific commercial-use-compatible licenses first.
-2. Treat the search engine as discovery only. Open the canonical source or asset page before deciding.
-3. Verify the subject, date or context, creator, license or permission text, attribution, and any modification restrictions.
-4. Download the selected original or documented derivative into `assets/collected/` and inspect the local file. For footage, also verify the depicted event, capture date or context, and permitted edit or excerpt terms.
-5. Record the search decision and asset provenance. If no result is both relevant and commercially reusable for the planned edit, record the fallback and generate an explanatory visual instead.
+1. Search the current news cluster and login-free public community posts for each scene's exact subject, action, and visible result before opening generic stock libraries. Do not retain community comments, usernames, avatars, profile images, private addresses, vehicle plates, or unrelated people.
+2. Open the canonical news article or community post before deciding. Treat the page and its image as discovery until subject, date or context, creator or publisher, license or permission text, attribution, privacy, and modification restrictions are reviewed.
+3. If the news or community image has a compatible permission basis, collect it as `licensed`, `official`, or `owned`. If it is directly relevant but permission remains unclear and the user will review rights before publication, collect only the selected original as `unreviewed`, `approved: false`, and `local_review_only: true`; prefer that local-review evidence over a generic stock substitute.
+4. When no usable current-news or public-community visual survives relevance, privacy, and access review, check official libraries, public-domain collections, and asset-specific commercial-use-compatible licensed sources. Use a generic stock library only after those searches are recorded.
+5. Download the selected original or documented derivative into `assets/collected/` and inspect the local file. For footage, also verify the depicted event, capture date or context, and permitted edit or excerpt terms.
+6. Record every search decision and asset provenance. Use generation only after the news, public-community, official, and licensed-library paths fail or cannot safely explain the scene.
 
-New Shorts still require at least one rights-cleared, non-synthetic news photo. It may be a licensed asset, reusable official media, or user-owned photo, but it must depict the reported subject, place, object, person, or event rather than merely suggest the topic. Mark `news_relevance_reviewed: true` only after that match is checked. If no qualifying photo exists, generation may fill explanatory scenes but final rendering remains blocked.
+New Shorts still require at least one rights-cleared, non-synthetic news photo. Version 14 also requires actual photos and real footage to cover at least 60% of visual scenes. It may be licensed media, reusable official media, or user-owned media, but it must depict the reported subject, place, object, person, or event rather than merely suggest the topic. Mark `news_relevance_reviewed: true` only after that match is checked. If the photo minimum or real-media ratio cannot be met safely, generation may fill explanatory scenes for review but final rendering remains blocked.
 
 For every asset used by a project version 3 `quick-reveal`, record `relevance_level` as `direct` or `contextual` and add a concrete `relevance_note` naming what in the image matches the scene claim. `Direct` means the actual reported person, object, event, document, or exact mechanism. Sharing only a city, industry, landscape, or mood is `contextual`. Hook, evidence, turn, impact, and payoff beats require `direct`; a contextual asset is allowed only in a context beat. This relevance review applies to generated explanatory visuals as well as collected media.
 
 Do not use search-engine thumbnails, image proxy URLs, article screenshots, embedded-player captures, or a publisher's visual merely because a download succeeds. Do not remove watermarks or crop out attribution marks to make an asset usable.
+
+Do not treat a public community post as permission. A community-hosted image with unknown rights remains a local-review asset even when the post is public, highly viewed, or widely reposted. Reject images that expose private individuals, minors, home addresses, license plates, usernames, or other unnecessary personal information.
+
+## Korean and international source-event context
+
+New projects use Korean images by default. A Korean collected or generated asset must record `visual_locale: "ko-KR"`, `korean_context_reviewed: true`, and a specific `korean_context_note`. Review the pixels for Korean-language signs, Hangul road or facility markings, Korean road geometry, apartment or storefront architecture, vehicle mix, public-facility design, currency, uniforms, and other location cues. The source being a Korean publisher or community does not prove the image is Korean.
+
+Reject foreign police uniforms, emergency vehicles, road signs, license plates, architecture, storefront language, currency, traffic markings, and obvious foreign stock settings when they are being used as Korean substitutes. Do not crop those cues away to pass the review. When a directly relevant Korean image cannot be found, use a Korean-context official document or a clearly explanatory `korean-editorial-realism` fallback.
+
+An international incident may use actual foreign source-event media only when the user explicitly selected that incident, a direct Korean citizen safety or rights consequence is recorded, and `international_source_visuals.enabled` is true. Each such asset records the configured source-country locale, matching `source_country`, `source_event_context_reviewed: true`, a concrete `source_event_context_note`, and `actual_event_media: true` for photos or video. Use only the exact reported event; unrelated foreign stock and visually similar old disasters remain prohibited. Public footage with unknown permission remains `unreviewed`, `approved: false`, and `local_review_only: true` until a compatible license or permission reference is supplied.
 
 Use official material only when its page states a compatible reuse basis. An official account or press page alone does not imply permission.
 
@@ -78,7 +94,12 @@ Each image or clip used by the storyboard must have:
 - retrieval or generation time;
 - `synthetic` boolean;
 - `approved` boolean.
+- `permission_status`: `unknown` or `review_required` for `unreviewed` assets.
+- `local_review_only: true` for `unreviewed` assets.
+- `whiteboard_text_free_reviewed` boolean when the asset may enter whiteboard preparation.
+- `media_type`: `photo`, `video`, `document`, `chart`, `illustration`, `pictogram`, `screenshot`, `map`, or `logo` for version 14 projects.
 - `relevance_level` and `relevance_note` for every asset in a project version 3 quick-reveal.
+- `visual_locale: "ko-KR"`, `korean_context_reviewed: true`, and a concrete `korean_context_note` for Korean-visual-only projects; or the configured source locale, `source_country`, `source_event_context_reviewed`, `source_event_context_note`, and `actual_event_media` for an approved international source-event scope.
 - `company_names`, `company_visual_type`, and `company_identity_reviewed: true` when the asset identifies a central named company.
 - `usage_role: "thumbnail-presenter"`, `presenter_context_reviewed: true`, and `case_party: false` for a separate presenter portrait.
 
@@ -95,7 +116,7 @@ For a collected web asset, also record `source_method: "web_search"`, the canoni
 
 Generated assets should also record the prompt, generation provider, pixel dimensions, optimization time, and `visual_quality_reviewed` state when available. Normalize generated stills to the project's `generated_image_size`, normally 720x1280, before final validation. Footage records should identify the original clip page and any excerpt or modification conditions. The renderer removing original clip audio does not remove the need to verify visual rights.
 
-New projects should set `visual_sourcing.max_generated_scene_ratio` to `0.4`. Treat it as a production target rather than permission to use synthetic visuals: if a draft exceeds the configured ratio, re-run the reusable photo, official document, footage, chart, and map search and record why each remaining generated scene is necessary.
+New projects should set `visual_sourcing.min_real_media_ratio` to `0.6` and `visual_sourcing.max_generated_scene_ratio` to `0.4`. Treat both as production gates rather than permission to use irrelevant stock media or synthetic visuals: if a draft misses either target, re-run the reusable photo, official document, footage, chart, and map search and record why each remaining non-photo scene is necessary.
 
 ## Generated visual style
 

@@ -1,0 +1,42 @@
+{
+  "manual_and_automatic": {
+    "subtitles": {
+      "ko": [
+        {
+          "ext": "vtt",
+          "url": "https://captions.example/manual-ko.vtt"
+        }
+      ]
+    },
+    "automatic_captions": {
+      "ko": [
+        {
+          "ext": "json3",
+          "url": "https://captions.example/automatic-ko.json3"
+        }
+      ]
+    }
+  },
+  "automatic_only": {
+    "subtitles": {
+      "en": [
+        {
+          "ext": "vtt",
+          "url": "https://captions.example/manual-en.vtt"
+        }
+      ]
+    },
+    "automatic_captions": {
+      "ko-KR": [
+        {
+          "ext": "vtt",
+          "url": "https://captions.example/automatic-ko.vtt"
+        }
+      ]
+    }
+  },
+  "none": {
+    "subtitles": {},
+    "automatic_captions": {}
+  }
+}

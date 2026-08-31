@@ -2,6 +2,8 @@
 
 All new formats use the same mandatory reference-derived composition: a black top quarter with one persistent, large, extra-bold, center-aligned two-line headline, a changing full-height 9:16 evidence image or clip behind it, and a lower yellow outlined caption. This retains the observed information hierarchy without copying another channel's logo, footage, narration, font, music, captions, or shot sequence.
 
+The optional `whiteboard` render mode is separate from that standard layout. It derives a warm-paper, dark-ink review image from each inspected local news visual, reveals the image through the Whiteboard Shorts renderer, and uses short viral-punch captions plus generated no-vocal music. It inherits the original image rights and is local-review-only when any source is `unreviewed`, `unknown`, or `review_required`. The conversion must not erase embedded text, attribution, or logos to make a source appear reusable; reject or replace those sources before preparation.
+
 - Set `visual_style.display_headline` to the short factual promise that stays on every scene; it falls back to the project title only when unset.
 - Use `visual_style.headline_highlight` for one exact phrase in that fixed headline. The default accent is `#FFF200`.
 - New projects use `visual_style.screen_copy_mode: "noun-phrases"`. Write all visible editorial copy as compact noun phrases and keep full Korean sentence endings in narration only. Prefer `제품 굳음 · 원인 미확인` over `제품이 굳었지만 원인은 확인되지 않았습니다`.
@@ -9,9 +11,20 @@ All new formats use the same mandatory reference-derived composition: a black to
 - Keep each ordinary scene at four seconds or less in the storyboard and normally 4.5 seconds or less after Typecast synthesis, so the evidence changes every three to four seconds. Keep the rendered payoff near 3.5-6 seconds.
 - Do not add a brand lockup, intro, decorative progress label, draft watermark, or synthetic-media badge to the news layout. The exceptions are the compact `FACT N/N` proof counter and the separate common CTA tail appended only after the completed payoff. Keep synthetic status in the project, rights, publish, and render metadata instead.
 - Replace the ordinary outlined caption on the last non-loop payoff with one opaque dark editorial conclusion card. Fully hide background panels, frames, and lines inside its bounds so they cannot read as extra cards. Start directly with the large white `payoff_title`; do not draw a `결론` badge, top accent bar, or other decorative header. Put the practical meaning or next check in a large bold yellow `payoff_detail`, not small footnote text. Give `payoff_title`, `payoff_detail`, divider, and `discussion_prompt` separate reserved vertical zones so no role can overlap another. When sourced public reaction is editorially relevant, add one separate large yellow `discussion_prompt` below the restrained divider; it must follow, not replace, the factual answer. Keep the scene visible for at least 3.5 seconds.
+- Treat the conclusion card as new information space. Do not copy an earlier complete caption, evidence value, or amount line into `payoff_title`, `payoff_detail`, or `payoff_punch`. Use that space for an actionable next step, remaining condition, concrete consequence, or supported question. A discussion question may close the narration, but the visible question should carry into the CTA only once.
 - Show `뉴스 출처: <publisher>` in small type near the bottom of each scene. Keep the asset/license credit separately above it when needed.
 - Keep each still's full source visible by default with `image_fit: "auto"`; the renderer places it inside the evidence-safe region over a dim blurred copy of the same source. Use `contain` when edges, text, people, or document bounds must be preserved. Use `cover` only for a deliberate full-bleed crop approved during visual review.
 - Use hard cuts between scenes. Do not use fades, wipes, flashes, zoom transitions, or other scene-to-scene effects.
+
+## Photo-first scene selection
+
+New version 14 projects use rights-cleared actual photos and real footage for at least 60% of visual scenes. Count only approved, non-synthetic assets with `news_relevance_reviewed: true` and a matching `media_type: "photo"` or `media_type: "video"`. A locally authored chart, document mockup, illustration, screenshot, or pictogram is not real media merely because `synthetic` is false. Keep sourced numbers and conditions in the overlay layer over a directly relevant photo when possible, and reserve diagrams or charts for evidence that cannot be shown accurately with documentary media.
+
+For new projects, search the active news cluster and login-free public community posts before generic stock libraries. Prefer a directly matching, provenance-preserved news or community image in a local review draft over a merely topical stock image. This priority does not grant publication rights: unclear permissions remain `unreviewed`, do not count toward the clean-final real-media ratio, and must be confirmed or replaced before final rendering. Exclude comments, usernames, avatars, profile images, private locations, license plates, and unrelated people from community-derived assets.
+
+All new-project visuals are Korean by default. Confirm Korean context from the image itself and record the visible evidence. A Korean-domain article with a foreign stock photo is not acceptable. Reject foreign signs, plates, police uniforms, emergency vehicles, currency, road markings, buildings, and storefront language when they are used as Korean substitutes. Generated fallback uses grounded present-day Korean editorial realism with ordinary lighting and materials, but must remain explanatory rather than impersonating an actual news photograph.
+
+For an explicitly selected international incident with direct Korean citizen impact, the project may instead use the international source-event scope. In that scope, prefer verified actual footage or photos of the exact event, keep source-country and scene-context review metadata, and use neutral explanatory graphics only for missing mechanisms. Do not mix in unrelated foreign stock, older lookalike disasters, or realistic generated event reconstructions. Rights-pending actual footage is review-only until permission is supplied.
 
 ## Composite thumbnail
 
@@ -46,6 +59,16 @@ Use for a single comparison, reversal, or answer that can pay off quickly.
 - End on a visible answer, cause, consequence, or meaning; never repeat the opening claim as the payoff.
 - Use `relevance_level: "direct"` visuals on hook, evidence, turn, impact, and payoff beats. Reserve `contextual` place or concept imagery for a context beat only, and add a specific `relevance_note` to every used asset.
 - Match visuals to the scene's predicate, not merely its topic noun. Write `subject + action + visible result` in `relevance_note`, then confirm the frame communicates all three without the caption. Prefer a visible apology, refund notice, inspection action, changed menu, damaged object, named person, or direct comparison over an icon grid that only suggests the category. If no reusable documentary image is permitted, use an anonymous original/generated explanatory scene with clear disclosure and no real-person implication.
+
+## `quick-reveal` + `visual-first` (version 16+)
+
+Use only when the user explicitly asks for a no-narration, screen-and-music-led Short.
+
+- Target 8-14 seconds including the CTA and use 4-6 content scenes.
+- Keep every narration empty and put every supported fact in concise visible copy linked to `claim_ids`.
+- Show the direct answer by 1.5 seconds and every truth-changing qualifier by 4.0 seconds.
+- Start at least three distinct scenes in the first three seconds unless one actual source video already supplies meaningful motion.
+- Use the renderer-generated no-vocal `news-pulse` bed. Do not add external music or treat `--no-tts` continuous-flow as visual-first.
 
 ## `fact-stack`
 

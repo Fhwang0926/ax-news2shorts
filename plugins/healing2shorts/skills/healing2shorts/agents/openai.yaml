@@ -1,4 +1,0 @@
-interface:
-  display_name: "힐링쇼츠"
-  short_description: "대사가 오가는 익명 힐링 썰과 음식 영상을 결합합니다"
-  default_prompt: "Use $healing2shorts to compare up to three anonymized or clearly fictionalized Korean healing anecdotes with 10–14 dialogue turns, mark the strongest eligible story as BEST, wait for my story and food-video choices, then create a 540x960 review Short and editable package from an authorized source."

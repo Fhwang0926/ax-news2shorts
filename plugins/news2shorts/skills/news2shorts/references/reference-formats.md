@@ -66,7 +66,7 @@ Choose the smallest format that can deliver a satisfying factual payoff.
 | Three or more linked facts, numbers, or a current update | `fact-stack` | 20-55s, 6-12 scenes | Result, numbered proof stack, middle turn, impact, callback payoff |
 | Mechanism, reconstruction, or escalating event | `story-explainer` | 35-120s, 8-20 scenes | Outcome, context, evidence, turn, escalation, payoff |
 
-New projects always use `quick-reveal` with `delivery_mode: "continuous-flow"`. Record the evidence-based angle and confidence in `project.json.format_selection`, and narrow complex coverage to one answer that fits 12-35 seconds. The other format examples on this page are legacy guidance for existing projects only.
+New projects always use `quick-reveal`. Continuous-flow is the 12-35 second default; explicit visual-first requests use 8-14 narration-free seconds with generated no-vocal music. Record the evidence-based angle and confidence in `project.json.format_selection`, and narrow complex coverage to one answer that fits the selected delivery mode. The other format examples on this page are legacy guidance for existing projects only.
 
 ## Entertainment without distortion
 

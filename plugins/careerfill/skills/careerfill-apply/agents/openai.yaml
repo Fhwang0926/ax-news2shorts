@@ -1,0 +1,6 @@
+interface:
+  display_name: "CareerFill 지원서 입력"
+  short_description: "지원서를 분석하고 승인된 값을 직접 입력·검증합니다."
+  default_prompt: "Use $careerfill-apply to analyze my selected Chrome application tab and directly enter the approved source-linked fields without saving or submitting."
+policy:
+  allow_implicit_invocation: true

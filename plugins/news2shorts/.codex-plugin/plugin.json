@@ -1,7 +1,7 @@
 {
   "name": "news2shorts",
-  "version": "0.36.3+codex.20260825221000",
-  "description": "Turn verified citizen-impact news into a continuous quick-reveal Short with a branded 뉴스한면 intro, ten-second rehook contract, and rights-reviewed thumbnail.",
+  "version": "0.36.5+codex.20260831064428",
+  "description": "Turn verified Korean citizen-impact news into continuous-flow or visual-first review Shorts with first-frame branding, answer-timing checks, source-aware visuals, and publication rights gates.",
   "author": {
     "name": "AX YouTube Shorts"
   },
@@ -15,8 +15,8 @@
   ],
   "interface": {
     "displayName": "news2shorts",
-    "shortDescription": "\ub274\uc2a4\ub97c \uc7ac\ubbf8\uc788\uace0 \uc9d1\uc911\ub3c4 \ub192\uc740 \uac80\uc99d\ud615 \uc1fc\uce20\ub85c \uc81c\uc791\ud569\ub2c8\ub2e4.",
-    "longDescription": "NAVER API 사용 여부와 관계없이 NAVER News를 오늘의 한국 뉴스 후보 발굴 범위에 포함하고, 정치·공공 책임과 생활비·주거·안전·건강·교육·노동·권리·개인정보·공공서비스 영향을 원문과 독립 출처로 교차검증합니다. 서로 다른 공개 커뮤니티의 제목은 같은 검증 뉴스가 관찰되는지 확인하는 작은 발견 신호로만 사용하며 사실이나 국민 여론으로 해석하지 않습니다. 모든 새 제작은 실제 뉴스한면 채널 로고와 고정 슬로건이 들어간 3.15초 인트로로 시작하고, 12~35초 quick-reveal과 continuous-flow만 사용합니다. 첫 장면을 2.5초 이내로 제한하고 고정 인트로를 포함한 10초 안에 검증된 부분 반전이 시작되도록 하며, 사실의 조건은 숨기지 않은 채 결론의 한 답만 뒤로 미룹니다. 본문 전체를 Typecast 한 번으로 읽고, 구절에 맞춰 권리 확인된 실제 사진과 근거 화면을 하드 컷으로 교체합니다. 일반 비민감 뉴스는 권리와 비당사자 맥락을 확인한 별도 진행자 이미지가 있을 때 진행자형 썸네일을 사용하고, 민감 뉴스나 안전한 진행자 자산이 없으면 직접 근거 합성으로 전환합니다. 실제 지역명, 중앙 실명 인물의 사진 권리·사생활 상태, 확인된 행위·누락과 시민 피해의 연결을 기록하고, 구체적인 시민 질문에서 시작해 검증된 반전과 답으로 끝냅니다. 별도 질문형 썸네일, 권리 기록, 720x1280 MP4, CapCut Desktop/Web·Vrew 호환 편집 패키지와 링크 없는 YouTube 업로드 패키지를 제공합니다.",
+    "shortDescription": "\uac80\uc99d \ub274\uc2a4\ub97c \uc74c\uc131\ud615 \ub610\ub294 \ud654\uba74\u00b7BGM\ud615 \uc1fc\uce20\ub85c \uc81c\uc791\ud569\ub2c8\ub2e4.",
+    "longDescription": "NAVER News\uc640 \ub274\uc2a4\ud53d\uc5d0\uc11c \ud604\uc7ac \uc774\uc288\ub97c \ucc3e\uace0 \uc6d0\ubb38\u00b7\ub3c5\ub9bd \ucd9c\ucc98\ub85c \uc2dc\ubbfc \uc601\ud5a5\uc744 \uac80\uc99d\ud55c \ud6c4\ubcf4 10\uac1c\ub97c \ud55c \ubc88\uc5d0 \uc81c\uc2dc\ud569\ub2c8\ub2e4. 10\uac1c\uac00 \uac80\uc99d\ub418\uae30 \uc804\uc5d0\ub294 \uc644\ub8cc \ubaa9\ub85d\uc73c\ub85c \uac04\uc8fc\ud558\uac70\ub098 \uc81c\uc791\uc744 \uc2dc\uc791\ud558\uc9c0 \uc54a\uc73c\uba70, \uc0ac\uc6a9\uc790\uac00 \ubc88\ud638\ub97c \uc120\ud0dd\ud574\uc57c \ub2e4\uc74c \ub2e8\uacc4\ub85c \uc9c4\ud589\ud569\ub2c8\ub2e4. \ub274\uc2a4\ud53d\uc758 \ub178\ucd9c\uacfc \uc21c\uc704\ub294 \ubc1c\uacac \uc2e0\ud638\ub85c\ub9cc \uc0ac\uc6a9\ud558\uace0 \uc6d0\ubb38\uc744 \ud655\uc778\ud558\uc9c0 \ubabb\ud55c \ud6c4\ubcf4\ub294 \uc81c\uc678\ud569\ub2c8\ub2e4. \uae30\ubcf8 continuous-flow\ub294 \ud55c \ud638\ud761 Typecast \ub0b4\ub808\uc774\uc158\uc744 \uc0ac\uc6a9\ud558\uba70, \uc0ac\uc6a9\uc790\uac00 \uba85\uc2dc\ud55c visual-first\ub294 \ub0b4\ub808\uc774\uc158 \uc5c6\uc774 \ube60\ub978 \ud654\uba74 \uc804\ud658\uacfc \ub80c\ub354\ub7ec \uc0dd\uc131 \ubb34\ubcf4\uceec BGM\uc744 \uc0ac\uc6a9\ud569\ub2c8\ub2e4. v16\uc740 \uccab \ud504\ub808\uc784\ubd80\ud130 \ub274\uc2a4\ud55c\uba74 \ub85c\uace0\uc640 \ubcf8\ubb38\uc744 \ud568\uaed8 \ubcf4\uc5ec\uc8fc\uace0 \uc2e4\uc81c \ub2f5\ubcc0\u00b7\uc870\uac74 \ub178\ucd9c \uc2dc\uc810\uc744 \uac80\uc99d\ud569\ub2c8\ub2e4. \ubcc4\ub3c4 \uc9c8\ubb38\ud615 \uc378\ub124\uc77c, 720x1280 MP4, CapCut\u00b7Vrew \ud638\ud658 \ud3b8\uc9d1 \ud328\ud0a4\uc9c0\uc640 \uc5c5\ub85c\ub4dc \uc815\ubcf4\ub97c \uc81c\uacf5\ud558\uc9c0\ub9cc \uc9c1\uc811 \uac8c\uc2dc\ud558\uc9c0\ub294 \uc54a\uc2b5\ub2c8\ub2e4.",
     "developerName": "AX YouTube Shorts",
     "category": "Productivity",
     "capabilities": [
@@ -24,8 +24,8 @@
       "Write"
     ],
     "defaultPrompt": [
-      "오늘 네이버 뉴스 후보를 검증하고 quick-reveal과 continuous-flow로 쇼츠를 만들어줘.",
-      "이 뉴스 링크로 quick-reveal 화면과 한 호흡 continuous-flow 음성을 적용한 30초 쇼츠를 만들어줘.",
+      "\uc624\ub298 \ub124\uc774\ubc84 \ub274\uc2a4\uc640 \ub274\uc2a4\ud53d\uc5d0\uc11c \uac80\uc99d\ub41c \ud6c4\ubcf4 10\uac1c\ub97c \ucc3e\uace0, \ub0b4\uac00 \uace0\ub978 \uc8fc\uc81c\ub85c continuous-flow \uc1fc\uce20\ub97c \ub9cc\ub4e4\uc5b4\uc918.",
+      "\uc774 \ub274\uc2a4 \ub9c1\ud06c\ub97c \uc74c\uc131 \uc5c6\uc774 \uc9c1\uad00\uc801\uc778 \ud654\uba74\uacfc BGM \uc911\uc2ec visual-first \uc1fc\uce20\ub85c \ub9cc\ub4e4\uc5b4\uc918.",
       "\uc774 \ud504\ub85c\uc81d\ud2b8\uc758 \ucd9c\ucc98\uc640 \uc774\ubbf8\uc9c0\u00b7\uc601\uc0c1 \uad8c\ub9ac\ub97c \uac80\uc0ac\ud574\uc918."
     ]
   }

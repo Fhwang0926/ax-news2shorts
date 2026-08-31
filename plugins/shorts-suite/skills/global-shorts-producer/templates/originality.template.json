@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "source_claim_order": [],
+  "output_claim_order": [],
+  "source_beat_order": [],
+  "output_beat_order": [],
+  "claim_order_similarity_percent": 0,
+  "beat_order_similarity_percent": 0,
+  "structure_similarity_percent": 0,
+  "hook_function_same": false,
+  "payoff_function_same": false,
+  "lexical_check": {
+    "status": "not_applicable_cross_language",
+    "reason": "Korean-to-English lexical overlap is not a meaningful originality measure."
+  },
+  "semantic_review": {
+    "decision": "REWRITE_REQUIRED",
+    "hook": "",
+    "conclusion": "",
+    "information_order": "",
+    "expression": ""
+  },
+  "decision": "REWRITE_REQUIRED"
+}

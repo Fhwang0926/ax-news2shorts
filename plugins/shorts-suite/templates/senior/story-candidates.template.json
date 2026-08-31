@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "generated_at": "",
+  "source_signal_file": "",
+  "selection_required": true,
+  "candidates": [
+    {
+      "id": "senior-candidate-01",
+      "title": "",
+      "logline": "",
+      "audience_pain": "",
+      "conflict": "",
+      "twist_direction": "",
+      "eight_scene_fit": "",
+      "originality_note": "",
+      "source_signal_ids": [],
+      "rights_mode": "original_fiction",
+      "sensitivity": "low",
+      "score": 0
+    },
+    {
+      "id": "senior-candidate-02",
+      "title": "",
+      "logline": "",
+      "audience_pain": "",
+      "conflict": "",
+      "twist_direction": "",
+      "eight_scene_fit": "",
+      "originality_note": "",
+      "source_signal_ids": [],
+      "rights_mode": "original_fiction",
+      "sensitivity": "low",
+      "score": 0
+    },
+    {
+      "id": "senior-candidate-03",
+      "title": "",
+      "logline": "",
+      "audience_pain": "",
+      "conflict": "",
+      "twist_direction": "",
+      "eight_scene_fit": "",
+      "originality_note": "",
+      "source_signal_ids": [],
+      "rights_mode": "original_fiction",
+      "sensitivity": "low",
+      "score": 0
+    }
+  ]
+}

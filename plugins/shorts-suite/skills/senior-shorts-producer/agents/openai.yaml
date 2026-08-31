@@ -1,0 +1,4 @@
+interface:
+  display_name: "시니어 쇼츠"
+  short_description: "기존 시니어 사연툰 프로젝트를 재개·검증합니다"
+  default_prompt: "Use $senior-shorts-producer to resume and validate my existing legacy Senior Shorts project."

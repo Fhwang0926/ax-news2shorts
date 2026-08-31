@@ -1,0 +1,4 @@
+interface:
+  display_name: "Guided Shorts"
+  short_description: "소스부터 렌더까지 매 단계 옵션 선택과 결과 승인을 받습니다"
+  default_prompt: "Use $guided-shorts-producer to start a new Shorts project and stop for my option selection and result approval at every stage."

@@ -1,0 +1,6 @@
+interface:
+  display_name: "cc_helper"
+  short_description: "이슈 자료를 모아 편집 가능한 캡컷 초안을 만듭니다."
+  default_prompt: "Use $cc-helper to research up to three current issues, wait for my selection, and prepare the selected issue as an editable local CapCut draft."
+policy:
+  allow_implicit_invocation: true

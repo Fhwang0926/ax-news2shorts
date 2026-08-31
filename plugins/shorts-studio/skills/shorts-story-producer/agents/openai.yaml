@@ -1,6 +1,0 @@
-interface:
-  display_name: "Shorts Story Producer"
-  short_description: "승인된 로컬 영상으로 캐릭터 이야기 쇼츠를 제작합니다."
-  default_prompt: "Use $shorts-story-producer to produce a Korean character Short from my approved local video and storyboard."
-policy:
-  allow_implicit_invocation: true

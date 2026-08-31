@@ -12,11 +12,15 @@ import functools
 import getpass
 import hashlib
 import html
+import io
+import ipaddress
 import json
+import math
 import os
 from pathlib import Path
 import re
 import shutil
+import socket
 import ssl
 import subprocess
 import sys
@@ -30,10 +34,11 @@ SKILL_ROOT = PLUGIN_ROOT / "skills" / "news2shorts"
 TEMPLATE_ROOT = SKILL_ROOT / "templates"
 KST = ZoneInfo("Asia/Seoul")
 NAVER_BASE_URL = "https://naverapihub.apigw.ntruss.com"
+DISCOVERY_CANDIDATE_COUNT = 10
 TYPECAST_TTS_URL = "https://api.typecast.ai/v1/text-to-speech"
 TYPECAST_MODEL = "ssfm-v30"
-TYPECAST_VOICE_ID = "tc_68257f68bc6e3c161ab5078d"
-TYPECAST_VOICE_NAME = "Piljae"
+TYPECAST_VOICE_ID = "tc_68d4b115f0486108a7eefb37"
+TYPECAST_VOICE_NAME = "Kangil"
 TYPECAST_VOICE_SELECTION_STRATEGY = "official-popular-top5+content-fit+stable-80-20"
 TYPECAST_VOICE_POPULARITY_BASIS = "Typecast 공식 인기 캐릭터 Top 5 (2026-08-12 갱신)"
 TYPECAST_VOICE_POPULARITY_SOURCE = "https://typecast.ai/kr/learn/typecast-new-editor-characters/"
@@ -76,8 +81,8 @@ TYPECAST_VOICE_ALIASES = {
     "문정": "moonjung",
     "강일": "kangil",
 }
-TYPECAST_DEFAULT_VOICE_BUCKETS = ("piljae",) * 8 + ("daeun",) * 2
-TYPECAST_DEFAULT_VOICE_DISTRIBUTION = "Piljae 80% / Daeun 20%"
+TYPECAST_DEFAULT_VOICE_BUCKETS = ("kangil",) * 8 + ("daeun",) * 2
+TYPECAST_DEFAULT_VOICE_DISTRIBUTION = "Kangil 80% / Daeun 20%"
 TYPECAST_DEFAULT_VOICE_DISTRIBUTION_BASIS = "project-stable-sha256"
 TYPECAST_DELIVERY_PROFILES = {
     "auto": {
@@ -115,9 +120,41 @@ TYPECAST_GUIDE_KEYWORDS = {
 }
 TYPECAST_ESTIMATED_CHARS_PER_SECOND = 6.2
 TYPECAST_SCENE_TAIL_SECONDS = 0.35
+TYPECAST_LEADING_SILENCE_KEEP_SECONDS = 0.12
+TYPECAST_TRAILING_SILENCE_KEEP_SECONDS = 0.18
+TYPECAST_SILENCE_THRESHOLD_DB = -42
 CONTINUOUS_FLOW_MODE = "continuous-flow"
+VISUAL_FIRST_MODE = "visual-first"
+DELIVERY_MODES = {CONTINUOUS_FLOW_MODE, VISUAL_FIRST_MODE}
+NARRATION_STYLE_STANDARD = "standard"
+NARRATION_STYLE_CC_HELPER_CONVERSATIONAL = "cc-helper-conversational"
+NARRATION_STYLES = {
+    NARRATION_STYLE_STANDARD,
+    NARRATION_STYLE_CC_HELPER_CONVERSATIONAL,
+}
+SOURCE_VIDEO_AUDIO_MODE = "source-video"
+NARRATION_AUDIO_MODE = "narration"
+ALLOWED_SCENE_AUDIO_MODES = {NARRATION_AUDIO_MODE, SOURCE_VIDEO_AUDIO_MODE}
+SOURCE_AUDIO_REVIEW_FILENAME = "source-audio-review.json"
+SOURCE_AUDIO_REVIEW_VERSION = 1
+SOURCE_TRANSCRIPT_MATCH_THRESHOLD = 0.72
+SOURCE_TRANSCRIPT_COVERAGE_THRESHOLD = 0.80
+SOURCE_AUDIO_EDGE_MARGIN_SECONDS = 0.15
 CONTINUOUS_FLOW_MIN_SCENE_SECONDS = 1.0
 CONTINUOUS_FLOW_PAYOFF_MIN_SECONDS = 3.5
+CONTINUOUS_FLOW_DEFAULT_DURATION_SECONDS = 20
+CONTINUOUS_FLOW_MIN_DURATION_SECONDS = 12
+CONTINUOUS_FLOW_MAX_DURATION_SECONDS = 35
+VISUAL_FIRST_DEFAULT_DURATION_SECONDS = 12
+VISUAL_FIRST_MIN_DURATION_SECONDS = 8
+VISUAL_FIRST_MAX_DURATION_SECONDS = 14
+VISUAL_FIRST_MIN_SCENES = 4
+VISUAL_FIRST_MAX_SCENES = 6
+VISUAL_FIRST_EARLY_WINDOW_SECONDS = 3.0
+VISUAL_FIRST_MIN_EARLY_STATES = 3
+CONTINUOUS_FLOW_ANSWER_DEADLINE_SECONDS = 8.0
+VISUAL_FIRST_ANSWER_DEADLINE_SECONDS = 1.5
+TRUTH_GUARD_DEADLINE_SECONDS = 4.0
 TARGET_DURATION_WARNING_RATIO = 1.15
 TARGET_DURATION_ERROR_RATIO = 1.25
 ORDINARY_SCENE_WARNING_SECONDS = 4.5
@@ -159,6 +196,25 @@ SCREEN_COPY_EXAMPLES = {
     "discussion_prompt": "정상 제품?",
 }
 GENERIC_UNKNOWN_PAYOFF_TERMS = ("미확인", "확인 중", "아직 없음", "지켜봐야")
+UNSTABLE_RELATIVE_TIME_PATTERN = re.compile(
+    r"(?:오늘|내일|다음\s*달|이번\s*달|이달)부터"
+)
+IMMEDIATE_TOW_PATTERN = re.compile(
+    r"(?:(?:바로|즉시)\s*견인|신고(?:하면|하자마자).{0,8}견인)"
+)
+DEFAULT_VISUAL_SOURCE_PRIORITY = (
+    "current-news-article",
+    "public-community-post",
+    "official-primary-media",
+    "licensed-media-library",
+    "generated-fallback",
+)
+DEFAULT_VISUAL_LOCALE = "ko-KR"
+DEFAULT_FOREIGN_VISUAL_FALLBACK = "blocked"
+DEFAULT_KOREAN_GENERATED_STYLE = "korean-editorial-realism"
+INTERNATIONAL_VISUAL_LOCALE = "mixed-source"
+INTERNATIONAL_FOREIGN_VISUAL_FALLBACK = "source-event-only"
+INTERNATIONAL_GENERATED_STYLE = "source-event-explainer"
 SCREEN_SENTENCE_ENDING_PATTERN = re.compile(
     r"(?:입니다|합니다|됩니다|했습니다|있습니다|없습니다|아닙니다|"
     r"이에요|예요|해요|돼요|맞나요|인가요|일까요|할까요|나요|까요|"
@@ -175,6 +231,10 @@ DEFAULT_QUERIES = [
     "안전 사고 관리 부실",
     "소비자 피해 개인정보",
 ]
+DEFAULT_PROJECT_HISTORY_ROOT = "projects"
+USED_TOPIC_TOKEN_SIMILARITY_THRESHOLD = 0.25
+USED_TOPIC_TEXT_SIMILARITY_THRESHOLD = 0.58
+USED_TOPIC_MIN_SHARED_TERMS = 2
 POLITICAL_TERMS = {
     "대통령",
     "대통령실",
@@ -397,11 +457,26 @@ FONT_CANDIDATES = [
     Path("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc"),
     Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
 ]
-ALLOWED_ASSET_KINDS = {"generated", "licensed", "official", "owned"}
+ALLOWED_ASSET_KINDS = {"generated", "licensed", "official", "owned", "unreviewed"}
 ALLOWED_SEARCH_OUTCOMES = {"collected", "generated", "no_usable_asset"}
 ALLOWED_IMAGE_MOTIONS = {"none", "slow-zoom", "zoom-in", "zoom-out"}
 ALLOWED_IMAGE_FITS = {"auto", "contain", "cover"}
 ALLOWED_VISUAL_RELEVANCE_LEVELS = {"direct", "contextual"}
+ALLOWED_MEDIA_TYPES = {
+    "photo",
+    "video",
+    "document",
+    "chart",
+    "illustration",
+    "pictogram",
+    "screenshot",
+    "map",
+    "logo",
+}
+DEFAULT_MIN_REAL_MEDIA_RATIO = 0.6
+VISUAL_MODES = {"standard", "hot-real-news", "whiteboard"}
+MAX_INTERNET_IMAGE_BYTES = 25 * 1024 * 1024
+MAX_INTERNET_IMAGE_PIXELS = 50_000_000
 ALLOWED_VISUAL_ROLES = {"evidence", "context", "explanation", "reaction-meme"}
 ALLOWED_MEME_ORIGINS = {"licensed", "owned", "original"}
 ALLOWED_COMPANY_VISUAL_TYPES = {
@@ -477,11 +552,11 @@ SUMMARY_LEAD_PREFIXES = (
 )
 QUICK_REVEAL_DIRECT_VISUAL_BEATS = {"hook", "evidence", "turn", "impact", "payoff"}
 REACTION_MEME_BEATS = {"context", "rehook"}
-DEFAULT_CTA_TAIL_DURATION = 4.0
+DEFAULT_CTA_TAIL_DURATION = 2.0
 MIN_CTA_TAIL_DURATION = 0.8
 MAX_CTA_TAIL_DURATION = 6.0
 CTA_NARRATION_TAIL_SECONDS = 0.25
-DEFAULT_CTA_NARRATION = "구독과 좋아요 누르면, 빠른 소식 전해드릴게요."
+DEFAULT_CTA_NARRATION = "다음 소식도 바로 전해드릴게요."
 DEFAULT_COMMENT_CTA_HEADLINE = "여러분의 판단"
 DEFAULT_COMMENT_CTA_PROMPT = "댓글로 한마디"
 DEFAULT_COMMENT_CTA_NARRATION = "여러분의 생각을 댓글로 남겨주세요."
@@ -492,6 +567,24 @@ CTA_TAIL_VARIANTS = ("subscribe", "comment")
 CTA_TAIL_SELECTION_STRATEGY = "sensitive-safe+discussion-fit+stable-50-50"
 CTA_TAIL_DEFAULT_DISTRIBUTION = "Subscribe 50% / Comment 50%"
 CTA_TAIL_DEFAULT_DISTRIBUTION_BASIS = "project-stable-sha256"
+MID_CTA_MODES = {"auto", "enabled", "disabled"}
+MID_CTA_PLACEMENT = "after-auto-rehook"
+MID_CTA_STYLE = "pity-native-arrow"
+MID_CTA_UI_TARGET_PROFILE = "youtube-shorts-mobile"
+MID_CTA_MIN_BODY_SECONDS = 20.0
+MID_CTA_MIN_DURATION = 1.5
+MID_CTA_MAX_DURATION = 2.0
+MID_CTA_AUDIO_TAIL_SECONDS = 0.12
+MID_CTA_TARGET_MIN_RATIO = 0.40
+MID_CTA_TARGET_MAX_RATIO = 0.60
+MID_CTA_TARGET_RATIO = 0.50
+MID_CTA_ALLOWED_BEATS = {"rehook", "turn"}
+MID_CTA_DEFAULT_TARGET_X = 0.34
+MID_CTA_DEFAULT_TARGET_Y = 0.86
+MID_CTA_UNVERIFIED_METRIC_PATTERN = re.compile(
+    r"(?:많은\s*분|조회수|구독률|시청자\s*수)"
+)
+BRAND_CLOSE_DURATION = 0.8
 BRAND_INTRO_ASSET_ID = "news-hanmyeon-channel"
 BRAND_INTRO_ASSET_PATH = PLUGIN_ROOT / "assets" / "brand-intro-news-hanmyeon.mp4"
 BRAND_INTRO_ASSET_PATHS = {
@@ -500,11 +593,19 @@ BRAND_INTRO_ASSET_PATHS = {
 }
 ALLOWED_BRAND_INTRO_ASSET_IDS = frozenset(BRAND_INTRO_ASSET_PATHS)
 BRAND_INTRO_SOURCE_DURATION_SECONDS = 3.15
+BRAND_MODE_CORNER_LOGO = "corner-logo"
+BRAND_MODE_LEGACY_FULL = "legacy-full"
+ALLOWED_BRAND_MODES = {BRAND_MODE_CORNER_LOGO, BRAND_MODE_LEGACY_FULL}
+BRAND_LOGO_PATH = PLUGIN_ROOT / "assets" / "news-hanmyeon-channel-logo.png"
+BRAND_LOGO_SIZE = 64
+BRAND_LOGO_MARGIN = 24
 DEFAULT_BRAND_INTRO_TRANSITION = "fadeblack"
 DEFAULT_BRAND_INTRO_TRANSITION_DURATION = 0.25
 MIN_BRAND_INTRO_TRANSITION_DURATION = 0.10
 MAX_BRAND_INTRO_TRANSITION_DURATION = 0.75
 ALLOWED_BRAND_INTRO_TRANSITIONS = {DEFAULT_BRAND_INTRO_TRANSITION}
+VISUAL_FIRST_AUDIO_PROFILE = "news-pulse"
+VISUAL_FIRST_AUDIO_PATH = "audio/background-music.wav"
 MIN_MOTION_DURATION = 0.35
 MAX_MOTION_DURATION = 2.5
 FACT_STACK_EVIDENCE_KINDS = {
@@ -548,6 +649,7 @@ PUBLISH_LINK_PATTERN = re.compile(
     r"(?:[A-Za-z0-9-]+\.)+(?:com|net|org|io|ai|kr)(?:/[^\s<>()\[\]]*)?",
     re.IGNORECASE,
 )
+PUBLISH_HASHTAG_PATTERN = re.compile(r"#[0-9A-Za-z가-힣_]+")
 PUBLIC_DESCRIPTION_PRODUCTION_PATTERNS = (
     re.compile(
         r"(?:화면(?:의|에)|영상(?:에|에서)|사용(?:한|된))[^.!?]{0,80}"
@@ -953,6 +1055,181 @@ def title_similarity(left: set[str], right: set[str]) -> float:
     return overlap / len(left | right)
 
 
+def normalized_source_url(value: object) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    parsed = parse.urlsplit(text)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return ""
+    host = parsed.netloc.lower().removeprefix("www.")
+    path = re.sub(r"/{2,}", "/", parsed.path or "/").rstrip("/") or "/"
+    return parse.urlunsplit((parsed.scheme.lower(), host, path, parsed.query, ""))
+
+
+def used_topic_match_terms(value: object) -> set[str]:
+    tokens = [
+        token
+        for token in re.findall(r"[0-9A-Za-z가-힣]{2,}", str(value or "").lower())
+        if token not in STOP_WORDS and not token.isdigit()
+    ]
+    terms = {token for token in tokens if len(token) >= 4}
+    for index in range(len(tokens) - 1):
+        combined = tokens[index] + tokens[index + 1]
+        if 4 <= len(combined) <= 24:
+            terms.add(combined)
+    return terms
+
+
+def is_news2shorts_history_project(project: object) -> bool:
+    if not isinstance(project, dict):
+        return False
+    profile = project.get("shorts_profile")
+    if not isinstance(profile, dict):
+        return False
+    has_editorial_profile = any(
+        str(profile.get(field) or "").strip()
+        for field in ("hook", "issue_focus", "viewer_stake", "payoff")
+    )
+    has_topic_identity = any(
+        str(project.get(field) or "").strip()
+        for field in ("title", "topic", "source_url")
+    )
+    return has_editorial_profile and has_topic_identity
+
+
+def load_used_topic_history(project_history_root: Path) -> tuple[list[dict], list[str]]:
+    if not project_history_root.is_dir():
+        return [], [f"기존 프로젝트 이력 경로를 찾지 못했습니다: {project_history_root}"]
+
+    records: list[dict] = []
+    warnings: list[str] = []
+    for project_file in sorted(project_history_root.rglob("project.json")):
+        try:
+            project = load_json(project_file)
+        except News2ShortsError as exc:
+            warnings.append(str(exc))
+            continue
+        if not is_news2shorts_history_project(project):
+            continue
+
+        assert isinstance(project, dict)
+        profile = project.get("shorts_profile") or {}
+        text_values = [
+            project.get("title"),
+            project.get("topic"),
+            profile.get("hook"),
+            profile.get("hook_stake"),
+            profile.get("issue_focus"),
+            profile.get("viewer_stake"),
+            profile.get("payoff"),
+        ]
+        source_urls = {normalized_source_url(project.get("source_url"))}
+        sources_file = project_file.parent / "sources.json"
+        if sources_file.is_file():
+            try:
+                sources_payload = load_json(sources_file)
+            except News2ShortsError as exc:
+                warnings.append(str(exc))
+            else:
+                if isinstance(sources_payload, dict):
+                    for source in sources_payload.get("sources") or []:
+                        if not isinstance(source, dict):
+                            continue
+                        text_values.append(source.get("title"))
+                        source_urls.add(normalized_source_url(source.get("url")))
+
+        texts = [str(value).strip() for value in text_values if str(value or "").strip()]
+        match_terms: set[str] = set()
+        for value in texts:
+            match_terms.update(used_topic_match_terms(value))
+        records.append(
+            {
+                "project_path": project_file.parent.relative_to(project_history_root).as_posix(),
+                "status": str(project.get("status") or "").strip(),
+                "title": str(project.get("title") or "").strip(),
+                "topic": str(project.get("topic") or "").strip(),
+                "texts": texts,
+                "source_urls": {url for url in source_urls if url},
+                "match_terms": match_terms,
+            }
+        )
+    return records, warnings
+
+
+def match_used_topic(candidate: dict, history: list[dict]) -> dict | None:
+    candidate_texts = [str(candidate.get("title") or "").strip()]
+    candidate_urls: set[str] = set()
+    for source in candidate.get("sources") or []:
+        if not isinstance(source, dict):
+            continue
+        title = str(source.get("title") or "").strip()
+        if title:
+            candidate_texts.append(title)
+        for field in ("url", "naver_url"):
+            normalized = normalized_source_url(source.get(field))
+            if normalized:
+                candidate_urls.add(normalized)
+
+    candidate_terms: set[str] = set()
+    for value in candidate_texts:
+        candidate_terms.update(used_topic_match_terms(value))
+
+    best_match: dict | None = None
+    for record in history:
+        shared_urls = sorted(candidate_urls & record["source_urls"])
+        best_token_score = 0.0
+        best_text_score = 0.0
+        for candidate_text in candidate_texts:
+            candidate_tokens = title_tokens(candidate_text)
+            for history_text in record["texts"]:
+                best_token_score = max(
+                    best_token_score,
+                    title_similarity(candidate_tokens, title_tokens(history_text)),
+                )
+                best_text_score = max(best_text_score, text_similarity(candidate_text, history_text))
+        shared_terms = sorted(
+            candidate_terms & record["match_terms"],
+            key=lambda term: (-len(term), term),
+        )
+
+        reason = ""
+        if shared_urls:
+            reason = "기존 프로젝트와 동일한 출처 URL"
+        elif best_token_score >= USED_TOPIC_TOKEN_SIMILARITY_THRESHOLD:
+            reason = "기존 프로젝트와 핵심 제목어가 같은 뉴스 군집"
+        elif best_text_score >= USED_TOPIC_TEXT_SIMILARITY_THRESHOLD:
+            reason = "기존 프로젝트의 제목·주제와 유사한 뉴스 군집"
+        elif len(shared_terms) >= USED_TOPIC_MIN_SHARED_TERMS:
+            reason = "기존 프로젝트와 복수의 고유 주제어가 일치하는 뉴스 군집"
+        if not reason:
+            continue
+
+        match = {
+            "reason": reason,
+            "project_path": record["project_path"],
+            "project_status": record["status"],
+            "project_title": record["title"],
+            "project_topic": record["topic"],
+            "shared_terms": shared_terms[:8],
+            "token_similarity": round(best_token_score, 3),
+            "text_similarity": round(best_text_score, 3),
+            "same_source_url": bool(shared_urls),
+        }
+        match_rank = (
+            1 if shared_urls else 0,
+            best_token_score,
+            best_text_score,
+            len(shared_terms),
+        )
+        if best_match is None or match_rank > best_match["_rank"]:
+            best_match = {**match, "_rank": match_rank}
+
+    if best_match is not None:
+        best_match.pop("_rank", None)
+    return best_match
+
+
 def matching_terms(text: str, terms: set[str]) -> list[str]:
     normalized = text.lower()
     return sorted(term for term in terms if term in normalized)
@@ -1171,6 +1448,46 @@ def public_upload_description(value: object) -> str:
     return re.sub(r"\n{3,}", "\n\n", "\n".join(cleaned_lines)).strip()
 
 
+def duplicated_title_sentences(title: object, description: object) -> list[str]:
+    title_text = PUBLISH_HASHTAG_PATTERN.sub("", str(title or "")).strip()
+    normalized_title = re.sub(r"[^0-9A-Za-z가-힣]", "", title_text.lower())
+    if not normalized_title:
+        return []
+
+    duplicates: list[str] = []
+    for raw_line in public_upload_description(description).splitlines():
+        if raw_line.strip() == "출처":
+            break
+        for sentence in re.split(r"(?<=[.!?])\s+", raw_line):
+            candidate = PUBLISH_HASHTAG_PATTERN.sub("", sentence).strip()
+            normalized_candidate = re.sub(r"[^0-9A-Za-z가-힣]", "", candidate.lower())
+            if not normalized_candidate:
+                continue
+            if normalized_candidate == normalized_title or text_similarity(title_text, candidate) >= 0.92:
+                duplicates.append(candidate)
+    return duplicates
+
+
+def deduplicated_upload_description(title: object, description: object) -> str:
+    duplicate_sentences = set(duplicated_title_sentences(title, description))
+    cleaned_lines: list[str] = []
+    in_sources = False
+    for raw_line in public_upload_description(description).splitlines():
+        if raw_line.strip() == "출처":
+            in_sources = True
+        line = PUBLISH_HASHTAG_PATTERN.sub("", raw_line)
+        if not in_sources:
+            sentences = re.split(r"(?<=[.!?])\s+", line)
+            line = " ".join(
+                sentence.strip()
+                for sentence in sentences
+                if sentence.strip() and sentence.strip() not in duplicate_sentences
+            )
+        line = re.sub(r"[ \t]+", " ", line).strip()
+        cleaned_lines.append(line)
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(cleaned_lines)).strip()
+
+
 def cluster_articles(
     articles: list[dict],
     queries: list[str],
@@ -1362,6 +1679,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         and brand_intro_info.get("has_audio")
         and (brand_intro_info.get("width"), brand_intro_info.get("height")) == OUTPUT_VIDEO_SIZE
     )
+    brand_logo_ok = BRAND_LOGO_PATH.is_file()
     report = {
         "ok": bool(
             shutil.which("ffmpeg")
@@ -1369,11 +1687,14 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             and pillow
             and font
             and brand_intro_ok
+            and brand_logo_ok
         ),
         "plugin_root": str(PLUGIN_ROOT),
         "python": sys.version.split()[0],
         "ffmpeg": shutil.which("ffmpeg"),
         "ffprobe": shutil.which("ffprobe"),
+        "source_audio_transcription": source_transcription_backends(),
+        "source_audio_review_file": SOURCE_AUDIO_REVIEW_FILENAME,
         "pillow": pillow,
         "font": font,
         "local_tts": shutil.which("say"),
@@ -1384,11 +1705,37 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         "brand_intro_video": brand_intro_info,
         "brand_intro_transition": DEFAULT_BRAND_INTRO_TRANSITION,
         "brand_intro_transition_duration": DEFAULT_BRAND_INTRO_TRANSITION_DURATION,
+        "default_brand_mode": BRAND_MODE_CORNER_LOGO,
+        "brand_logo_path": str(BRAND_LOGO_PATH),
+        "brand_logo_ok": brand_logo_ok,
+        "delivery_modes": sorted(DELIVERY_MODES),
+        "visual_first_audio_profile": VISUAL_FIRST_AUDIO_PROFILE,
+        "visual_first_audio_vocals": False,
         "cta_tail_variants": list(CTA_TAIL_VARIANTS),
         "cta_tail_selection_strategy": CTA_TAIL_SELECTION_STRATEGY,
         "cta_tail_default_distribution": CTA_TAIL_DEFAULT_DISTRIBUTION,
         "cta_tail_default_distribution_basis": CTA_TAIL_DEFAULT_DISTRIBUTION_BASIS,
+        "mid_cta_modes": sorted(MID_CTA_MODES),
+        "mid_cta_placement": MID_CTA_PLACEMENT,
+        "mid_cta_duration_range": [MID_CTA_MIN_DURATION, MID_CTA_MAX_DURATION],
+        "mid_cta_ui_target_profile": MID_CTA_UI_TARGET_PROFILE,
+        "mid_cta_arrow_target": {
+            "x": MID_CTA_DEFAULT_TARGET_X,
+            "y": MID_CTA_DEFAULT_TARGET_Y,
+        },
         "default_tts_provider": "typecast",
+        "default_visual_source_priority": list(DEFAULT_VISUAL_SOURCE_PRIORITY),
+        "default_visual_locale": DEFAULT_VISUAL_LOCALE,
+        "default_foreign_visual_fallback": DEFAULT_FOREIGN_VISUAL_FALLBACK,
+        "default_generated_visual_style": DEFAULT_KOREAN_GENERATED_STYLE,
+        "required_discovery_candidate_count": DISCOVERY_CANDIDATE_COUNT,
+        "typecast_outer_silence_trim": {
+            "enabled": True,
+            "leading_keep_seconds": TYPECAST_LEADING_SILENCE_KEEP_SECONDS,
+            "trailing_keep_seconds": TYPECAST_TRAILING_SILENCE_KEEP_SECONDS,
+            "threshold_db": TYPECAST_SILENCE_THRESHOLD_DB,
+            "internal_pauses_preserved": True,
+        },
         "typecast_api_key_configured": typecast_api_key_source is not None,
         "typecast_api_key_source": typecast_api_key_source,
         "typecast_keychain_check_limited": keychain_check_limited,
@@ -1474,9 +1821,10 @@ def cmd_discover(args: argparse.Namespace) -> int:
         fail("--limit은 1에서 100 사이여야 합니다.")
     if not 1 <= args.hours <= 168:
         fail("--hours는 1에서 168 사이여야 합니다.")
-    if not 1 <= args.candidates <= 50:
-        fail("--candidates는 1에서 50 사이여야 합니다.")
-    cutoff = now_kst() - dt.timedelta(hours=args.hours)
+    if args.candidates != DISCOVERY_CANDIDATE_COUNT:
+        fail(f"--candidates는 {DISCOVERY_CANDIDATE_COUNT}만 허용합니다.")
+    effective_hours = min(args.hours, 24) if args.hot_real_news else args.hours
+    cutoff = now_kst() - dt.timedelta(hours=effective_hours)
     seen: set[str] = set()
     articles: list[dict] = []
     for query in queries:
@@ -1505,18 +1853,35 @@ def cmd_discover(args: argparse.Namespace) -> int:
             )
 
     community_signals = load_community_signals(args.community_signals)
-    candidates = cluster_articles(articles, queries, args.hours, community_signals)
-    warnings: list[str] = []
-    if not args.skip_trends and candidates:
+    candidates = cluster_articles(articles, queries, effective_hours, community_signals)
+    project_history_root = Path(args.project_history_root).expanduser().resolve()
+    used_topic_history, history_warnings = load_used_topic_history(project_history_root)
+    warnings: list[str] = list(history_warnings)
+    new_candidates: list[dict] = []
+    excluded_used_topics: list[dict] = []
+    for candidate in candidates:
+        history_match = match_used_topic(candidate, used_topic_history)
+        if history_match is None:
+            new_candidates.append(candidate)
+            continue
+        excluded_used_topics.append(
+            {
+                "id": candidate["id"],
+                "title": candidate["title"],
+                "score": candidate["score"],
+                "history_match": history_match,
+            }
+        )
+    if not args.skip_trends and new_candidates:
         try:
-            warning = add_trend_scores(candidates)
+            warning = add_trend_scores(new_candidates)
             if warning:
                 warnings.append(warning)
         except News2ShortsError as exc:
             warnings.append(f"검색어 트렌드 점수를 생략했습니다: {exc}")
     qualified_candidates = [
         candidate
-        for candidate in candidates
+        for candidate in new_candidates
         if candidate.get("citizen_impact_gate", {}).get("eligible") is True
     ]
     rejected_candidates = [
@@ -1526,16 +1891,56 @@ def cmd_discover(args: argparse.Namespace) -> int:
             "score": candidate["score"],
             "citizen_impact_gate": candidate.get("citizen_impact_gate", {}),
         }
-        for candidate in candidates
+        for candidate in new_candidates
         if candidate.get("citizen_impact_gate", {}).get("eligible") is not True
     ]
+    if args.hot_real_news:
+        hot_candidates: list[dict] = []
+        for candidate in qualified_candidates:
+            hotness = candidate.get("hotness_evidence") or {}
+            if (
+                int(hotness.get("recent_6h_source_count") or 0) >= 2
+                and int(candidate.get("source_count") or 0) >= 2
+            ):
+                hot_candidates.append(candidate)
+            else:
+                rejected_candidates.append(
+                    {
+                        "id": candidate["id"],
+                        "title": candidate["title"],
+                        "score": candidate["score"],
+                        "hot_real_news_gate": {
+                            "eligible": False,
+                            "reason": "최근 6시간 내 서로 다른 출처 2곳 이상에서 확인되지 않았습니다.",
+                        },
+                    }
+                )
+        qualified_candidates = hot_candidates
+    discovery_complete = len(qualified_candidates) >= DISCOVERY_CANDIDATE_COUNT
+    candidate_shortfall = max(0, DISCOVERY_CANDIDATE_COUNT - len(qualified_candidates))
+    if not discovery_complete:
+        warnings.append(
+            f"검증된 후보가 {len(qualified_candidates)}/{DISCOVERY_CANDIDATE_COUNT}개입니다. "
+            "시간 범위·검색 레인·기사 수를 넓혀 10개를 채우기 전까지 완료 목록으로 사용하지 마세요."
+        )
+
     result = {
-        "version": 3,
+        "version": 6,
         "as_of": iso_now(),
         "timezone": "Asia/Seoul",
-        "window_hours": args.hours,
+        "window_hours": effective_hours,
+        "discovery_mode": "hot-real-news" if args.hot_real_news else "standard",
         "queries": queries,
         "article_count": len(articles),
+        "project_history_root": str(project_history_root),
+        "project_history_count": len(used_topic_history),
+        "used_topic_exclusion_policy": (
+            "현재 projects 이력의 news2shorts project.json과 sources.json을 먼저 읽고, "
+            "동일 출처 URL 또는 제목·주제·교차검증 기사 기준으로 같은 뉴스 군집을 후보에서 제외합니다. "
+            "초안·수정 대기·렌더 완료 상태를 모두 이미 다룬 주제로 봅니다."
+        ),
+        "candidate_count_before_history_gate": len(candidates),
+        "excluded_used_topic_count": len(excluded_used_topics),
         "community_signal_count": len(community_signals),
         "community_signal_policy": (
             "공개 커뮤니티의 제목과 URL은 이슈 발견 신호일 뿐 사실·여론 근거가 아닙니다. "
@@ -1546,8 +1951,11 @@ def cmd_discover(args: argparse.Namespace) -> int:
             "추천 후보는 영향받는 집단과 직접 비용·안전·권리·공공서비스 결과를 함께 확인해야 합니다. "
             "외부 시민 결과가 없는 조직 내부 이해관계와 간접 정치 공방은 추천 목록에서 제외합니다."
         ),
-        "candidate_count_before_citizen_gate": len(candidates),
+        "candidate_count_before_citizen_gate": len(new_candidates),
         "qualified_candidate_count": len(qualified_candidates),
+        "required_candidate_count": DISCOVERY_CANDIDATE_COUNT,
+        "discovery_complete": discovery_complete,
+        "candidate_shortfall": candidate_shortfall,
         "score_model": {
             "freshness": 15,
             "news_velocity": 20,
@@ -1562,8 +1970,9 @@ def cmd_discover(args: argparse.Namespace) -> int:
             "score_cap": 100,
         },
         "warnings": warnings,
-        "candidates": qualified_candidates[: args.candidates],
-        "rejected_candidates": rejected_candidates[: args.candidates],
+        "candidates": qualified_candidates[:DISCOVERY_CANDIDATE_COUNT],
+        "excluded_used_topics": excluded_used_topics[:DISCOVERY_CANDIDATE_COUNT],
+        "rejected_candidates": rejected_candidates[:DISCOVERY_CANDIDATE_COUNT],
     }
     if args.output:
         output = Path(args.output).expanduser().resolve()
@@ -1571,7 +1980,7 @@ def cmd_discover(args: argparse.Namespace) -> int:
         print(output)
     else:
         print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 0
+    return 0 if discovery_complete else 2
 
 
 def ensure_empty_project_dir(project_dir: Path) -> None:
@@ -1583,8 +1992,38 @@ def ensure_empty_project_dir(project_dir: Path) -> None:
 def cmd_init(args: argparse.Namespace) -> int:
     if not args.title.strip():
         fail("--title은 비어 있을 수 없습니다.")
-    if not 15 <= args.duration <= 180:
-        fail("--duration은 15에서 180초 사이여야 합니다.")
+    delivery_mode = str(args.delivery_mode or CONTINUOUS_FLOW_MODE).strip()
+    if delivery_mode not in DELIVERY_MODES:
+        fail("--delivery-mode는 continuous-flow 또는 visual-first여야 합니다.")
+    narration_style = str(
+        args.narration_style or NARRATION_STYLE_STANDARD
+    ).strip()
+    if narration_style not in NARRATION_STYLES:
+        fail("--narration-style은 standard 또는 cc-helper-conversational이어야 합니다.")
+    if (
+        delivery_mode == VISUAL_FIRST_MODE
+        and narration_style != NARRATION_STYLE_STANDARD
+    ):
+        fail("visual-first는 내레이션이 없어 cc-helper-conversational 말투를 사용할 수 없습니다.")
+    if args.duration is None:
+        duration = (
+            VISUAL_FIRST_DEFAULT_DURATION_SECONDS
+            if delivery_mode == VISUAL_FIRST_MODE
+            else CONTINUOUS_FLOW_DEFAULT_DURATION_SECONDS
+        )
+    else:
+        duration = int(args.duration)
+    if delivery_mode == VISUAL_FIRST_MODE:
+        if not VISUAL_FIRST_MIN_DURATION_SECONDS <= duration <= VISUAL_FIRST_MAX_DURATION_SECONDS:
+            fail(
+                "visual-first --duration은 "
+                f"{VISUAL_FIRST_MIN_DURATION_SECONDS}에서 {VISUAL_FIRST_MAX_DURATION_SECONDS}초 사이여야 합니다."
+            )
+    elif not CONTINUOUS_FLOW_MIN_DURATION_SECONDS <= duration <= CONTINUOUS_FLOW_MAX_DURATION_SECONDS:
+        fail(
+            "continuous-flow --duration은 "
+            f"{CONTINUOUS_FLOW_MIN_DURATION_SECONDS}에서 {CONTINUOUS_FLOW_MAX_DURATION_SECONDS}초 사이여야 합니다."
+        )
     if args.source_url:
         parsed_source = parse.urlsplit(args.source_url)
         if parsed_source.scheme not in {"http", "https"} or not parsed_source.netloc:
@@ -1611,9 +2050,10 @@ def cmd_init(args: argparse.Namespace) -> int:
             "source_url": args.source_url or "",
             "created_at": created_at,
             "updated_at": created_at,
-            "target_duration_seconds": args.duration,
+            "target_duration_seconds": duration,
             "sensitive_topic": args.sensitive,
-            "delivery_mode": CONTINUOUS_FLOW_MODE,
+            "delivery_mode": delivery_mode,
+            "narration_style": narration_style,
             "format_selection": {
                 "mode": args.format_mode,
                 "selected": args.style,
@@ -1633,6 +2073,8 @@ def cmd_init(args: argparse.Namespace) -> int:
                 "open_loop": "",
                 "midpoint_rehook": "",
                 "early_rehook_scene_id": "",
+                "first_answer_scene_id": "",
+                "truth_guard_scene_id": "",
                 "withheld_detail": "",
                 "truth_guard": "",
                 "payoff": "",
@@ -1652,6 +2094,92 @@ def cmd_init(args: argparse.Namespace) -> int:
             },
         }
     )
+    visual_sourcing = project.get("visual_sourcing")
+    visual_style = project.get("visual_style")
+    assert isinstance(visual_sourcing, dict) and isinstance(visual_style, dict)
+    visual_sourcing["mode"] = args.visual_mode
+    visual_sourcing["hot_real_news"] = {
+        "enabled": args.visual_mode in {"hot-real-news", "whiteboard"},
+        "max_age_hours": 24,
+        "min_recent_6h_source_count": 2,
+        "allow_unreviewed_local_draft": True,
+    }
+    visual_sourcing["whiteboard"] = {
+        "enabled": args.visual_mode == "whiteboard",
+        "renderer": "whiteboard-shorts",
+        "project_dir": "whiteboard-project",
+        "source_rights_inherited": True,
+    }
+    if args.international_source_country:
+        source_country = str(args.international_source_country).strip().upper()
+        source_locale = str(args.international_source_locale or "").strip()
+        citizen_stake = str(args.international_citizen_stake or "").strip()
+        if not re.fullmatch(r"[A-Z]{2}", source_country):
+            fail("--international-source-country는 ISO 2자리 국가 코드여야 합니다.")
+        if len(source_locale) < 2:
+            fail("--international-source-locale을 입력하세요.")
+        if len(re.sub(r"\s+", "", citizen_stake)) < 8:
+            fail("--international-citizen-stake에 한국 시민 영향을 구체적으로 입력하세요.")
+        visual_sourcing.update(
+            {
+                "korean_visuals_required": False,
+                "visual_locale": INTERNATIONAL_VISUAL_LOCALE,
+                "foreign_visual_fallback": INTERNATIONAL_FOREIGN_VISUAL_FALLBACK,
+                "korean_context_review_required": False,
+                "generated_style": INTERNATIONAL_GENERATED_STYLE,
+                "international_source_visuals": {
+                    "enabled": True,
+                    "source_country": source_country,
+                    "source_locale": source_locale,
+                    "actual_event_only": True,
+                    "rights_review_required": True,
+                    "citizen_stake": citizen_stake,
+                },
+            }
+        )
+    visual_style["render_mode"] = args.visual_mode
+    brand_intro = project.get("brand_intro")
+    mid_cta = project.get("mid_cta")
+    cta_tail = project.get("cta_tail")
+    audio_bed = project.get("audio_bed")
+    assert (
+        isinstance(brand_intro, dict)
+        and isinstance(mid_cta, dict)
+        and isinstance(cta_tail, dict)
+        and isinstance(audio_bed, dict)
+    )
+    brand_intro.update(
+        {
+            "enabled": True,
+            "mode": BRAND_MODE_CORNER_LOGO,
+            "asset": BRAND_INTRO_ASSET_ID,
+            "position": "top-left",
+        }
+    )
+    cta_tail["duration"] = DEFAULT_CTA_TAIL_DURATION
+    cta_tail["narration"] = DEFAULT_CTA_NARRATION
+    mid_cta["mode"] = str(args.mid_cta_mode or "auto")
+    if delivery_mode == VISUAL_FIRST_MODE:
+        cta_tail["voice_enabled"] = False
+        audio_bed.update(
+            {
+                "enabled": True,
+                "mode": "renderer-generated",
+                "profile": VISUAL_FIRST_AUDIO_PROFILE,
+                "vocals": False,
+                "path": VISUAL_FIRST_AUDIO_PATH,
+            }
+        )
+    else:
+        audio_bed.update(
+            {
+                "enabled": False,
+                "mode": "none",
+                "profile": "",
+                "vocals": False,
+                "path": "",
+            }
+        )
     write_json(project_dir / "project.json", project)
     sources = {"version": 1, "as_of": created_at, "sources": []}
     if args.source_url:
@@ -1684,7 +2212,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     write_json(
         project_dir / "publish.json",
         {
-            "version": 4,
+            "version": 5,
             "title": "",
             "description": "",
             "tags": [],
@@ -1694,6 +2222,7 @@ def cmd_init(args: argparse.Namespace) -> int:
             "upload_settings": {
                 "thumbnail_method": "file_upload",
                 "thumbnail_file": DEFAULT_THUMBNAIL_PATH,
+                "thumbnail_status": "pending",
                 "thumbnail_hook": "",
                 "thumbnail_subhook": "",
                 "thumbnail_badge": "",
@@ -2102,11 +2631,405 @@ def narration_voice_config(project: dict) -> dict:
     return configured if isinstance(configured, dict) else {"mode": "auto", "voice": ""}
 
 
+def scene_audio_mode(scene: dict) -> str:
+    return str(scene.get("audio_mode") or NARRATION_AUDIO_MODE).strip().lower()
+
+
+def scene_uses_source_video_audio(scene: dict) -> bool:
+    return scene_audio_mode(scene) == SOURCE_VIDEO_AUDIO_MODE
+
+
+def narration_style_config(project: dict) -> str:
+    return str(
+        project.get("narration_style") or NARRATION_STYLE_STANDARD
+    ).strip()
+
+
+def uses_formal_narration_ending(value: str) -> bool:
+    return bool(
+        re.search(
+            r"(?:합니다|입니다|됩니다|랍니다|습니다|합니까|입니까|됩니까)(?:[.!?…]+|$)",
+            value,
+        )
+    )
+
+
+def narration_ending_family(value: object) -> str:
+    tokens = re.findall(r"[0-9A-Za-z가-힣]+", str(value or "").lower())
+    if not tokens:
+        return ""
+    last = tokens[-1]
+    if last.endswith(("는데", "인데")):
+        return "de"
+    if last == "함" or last.endswith(("다고함", "라고함")):
+        return "ham"
+    return ""
+
+
+def validate_narration_style(project: dict, scenes: list[dict]) -> list[str]:
+    errors: list[str] = []
+    style = narration_style_config(project)
+    if style not in NARRATION_STYLES:
+        return [
+            "project.json narration_style은 standard 또는 "
+            "cc-helper-conversational이어야 합니다."
+        ]
+    if style != NARRATION_STYLE_CC_HELPER_CONVERSATIONAL:
+        return errors
+    if str(project.get("delivery_mode") or "").strip() == VISUAL_FIRST_MODE:
+        return ["visual-first는 내레이션이 없어 cc-helper-conversational 말투를 사용할 수 없습니다."]
+
+    narrated_endings: list[tuple[str, str, bool]] = []
+    for index, scene in enumerate(scenes, start=1):
+        if not isinstance(scene, dict):
+            continue
+        narration = str(scene.get("narration") or "").strip()
+        if not narration:
+            continue
+        scene_id = str(scene.get("id") or f"scene-{index:02d}")
+        if scene_uses_source_video_audio(scene):
+            narrated_endings.append((scene_id, "", False))
+            continue
+        if uses_formal_narration_ending(narration):
+            errors.append(
+                f"{scene_id} cc-helper-conversational은 친구 설명형 구어체여야 하며 "
+                "합니다/했습니다 종결을 사용할 수 없습니다."
+            )
+        narrated_endings.append((scene_id, narration_ending_family(narration), True))
+
+    for left, right in zip(narrated_endings, narrated_endings[1:]):
+        if left[2] and right[2] and left[1] == right[1] == "de":
+            errors.append(
+                f"{left[0]}/{right[0]}에 "
+                "~데/~는데 종결을 연속 사용할 수 없습니다."
+            )
+    if (
+        len(narrated_endings) >= 2
+        and all(item[2] for item in narrated_endings[-2:])
+        and [item[1] for item in narrated_endings[-2:]] == ["ham", "ham"]
+    ):
+        errors.append("cc-helper-conversational은 마지막 두 장면을 ~함 종결로 연속할 수 없습니다.")
+    return errors
+
+
+def scene_external_caption_enabled(scene: dict) -> bool:
+    return scene.get("external_caption") is not False
+
+
+def scene_text_overlay_enabled(scene: dict) -> bool:
+    return scene.get("render_text_overlay") is not False
+
+
+def normalize_source_dialogue(value: object) -> str:
+    return re.sub(r"[^0-9A-Za-z가-힣]+", "", str(value or "")).lower()
+
+
+def source_dialogue_match(expected: object, actual: object) -> dict:
+    expected_text = normalize_source_dialogue(expected)
+    actual_text = normalize_source_dialogue(actual)
+    if not expected_text or not actual_text:
+        return {
+            "similarity": 0.0,
+            "expected_coverage": 0.0,
+            "passed": False,
+        }
+    matcher = SequenceMatcher(None, expected_text, actual_text)
+    matched = sum(block.size for block in matcher.get_matching_blocks())
+    similarity = matcher.ratio()
+    coverage = matched / len(expected_text)
+    return {
+        "similarity": round(similarity, 4),
+        "expected_coverage": round(coverage, 4),
+        "passed": bool(
+            similarity >= SOURCE_TRANSCRIPT_MATCH_THRESHOLD
+            and coverage >= SOURCE_TRANSCRIPT_COVERAGE_THRESHOLD
+        ),
+    }
+
+
+def source_transcription_backends() -> dict:
+    whisper = shutil.which("whisper")
+    return {
+        "transcript-file": True,
+        "openai-whisper-cli": whisper,
+        "automatic_available": bool(whisper),
+    }
+
+
+def transcript_segments(value: object) -> list[dict]:
+    if not isinstance(value, list):
+        return []
+    segments: list[dict] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        try:
+            start = max(0.0, float(item.get("start") or 0.0))
+            end = max(start, float(item.get("end") or start))
+        except (TypeError, ValueError):
+            continue
+        text = str(item.get("text") or "").strip()
+        if text:
+            segments.append({"start": round(start, 3), "end": round(end, 3), "text": text})
+    return segments
+
+
+def transcript_record(value: object) -> dict:
+    if isinstance(value, str):
+        return {"text": value.strip(), "segments": []}
+    if not isinstance(value, dict):
+        return {"text": "", "segments": []}
+    segments = transcript_segments(value.get("segments"))
+    text = str(value.get("text") or value.get("transcript") or "").strip()
+    if not text and segments:
+        text = " ".join(segment["text"] for segment in segments).strip()
+    return {"text": text, "segments": segments}
+
+
+def load_source_transcript_records(path: Path, scene_ids: list[str]) -> dict[str, dict]:
+    if path.suffix.lower() != ".json":
+        if len(scene_ids) != 1:
+            raise News2ShortsError(
+                "일반 텍스트 전사 파일은 source-video 장면 하나를 선택했을 때만 사용할 수 있습니다."
+            )
+        return {scene_ids[0]: transcript_record(path.read_text(encoding="utf-8"))}
+    value = load_json(path)
+    if isinstance(value, dict) and isinstance(value.get("scenes"), list):
+        records: dict[str, dict] = {}
+        for item in value["scenes"]:
+            if not isinstance(item, dict):
+                continue
+            scene_id = str(item.get("scene_id") or item.get("id") or "").strip()
+            if scene_id:
+                records[scene_id] = transcript_record(item)
+        return records
+    if isinstance(value, dict) and isinstance(value.get("scenes"), dict):
+        return {
+            str(scene_id): transcript_record(record)
+            for scene_id, record in value["scenes"].items()
+        }
+    if isinstance(value, dict) and ("text" in value or "segments" in value):
+        if len(scene_ids) != 1:
+            raise News2ShortsError(
+                "단일 Whisper JSON은 source-video 장면 하나를 선택했을 때만 사용할 수 있습니다."
+            )
+        return {scene_ids[0]: transcript_record(value)}
+    if isinstance(value, dict):
+        return {str(scene_id): transcript_record(record) for scene_id, record in value.items()}
+    raise News2ShortsError("지원하지 않는 전사 파일 형식입니다.")
+
+
+def run_whisper_source_transcription(
+    audio_path: Path,
+    *,
+    output_dir: Path,
+    language: str,
+    model: str,
+    model_dir: Path,
+    allow_model_download: bool,
+) -> dict:
+    whisper = shutil.which("whisper")
+    if not whisper:
+        raise News2ShortsError(
+            "자동 전사 백엔드가 없습니다. 로컬 OpenAI Whisper CLI를 준비하거나 "
+            "--transcript-file로 검토된 UTF-8 전사를 제공하세요."
+        )
+    model_path = model_dir / f"{model}.pt"
+    if not model_path.is_file() and not allow_model_download:
+        raise News2ShortsError(
+            f"로컬 Whisper 모델이 없습니다: {model_path}. "
+            "모델 다운로드를 허용하려면 --allow-model-download를 명시하세요."
+        )
+    model_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    run_command(
+        [
+            whisper,
+            str(audio_path),
+            "--language",
+            language,
+            "--task",
+            "transcribe",
+            "--model",
+            model,
+            "--model_dir",
+            str(model_dir),
+            "--word_timestamps",
+            "True",
+            "--output_format",
+            "json",
+            "--output_dir",
+            str(output_dir),
+        ]
+    )
+    output_path = output_dir / f"{audio_path.stem}.json"
+    if not output_path.is_file():
+        raise News2ShortsError(f"Whisper 전사 결과가 생성되지 않았습니다: {output_path}")
+    return transcript_record(load_json(output_path))
+
+
+def build_source_audio_scene_review(
+    scene: dict,
+    *,
+    source_path: str,
+    source_sha256: str,
+    transcript: dict,
+    timing_confirmed: bool,
+) -> dict:
+    scene_id = str(scene.get("id") or "").strip()
+    expected_text = str(scene.get("narration") or "").strip()
+    actual_text = str(transcript.get("text") or "").strip()
+    segments = transcript_segments(transcript.get("segments"))
+    duration = max(0.0, float(scene.get("duration") or 0.0))
+    video_start = max(0.0, float(scene.get("video_start") or 0.0))
+    match = source_dialogue_match(expected_text, actual_text)
+    first_spoken_at = segments[0]["start"] if segments else None
+    last_spoken_at = segments[-1]["end"] if segments else None
+    leading_margin = round(first_spoken_at, 3) if first_spoken_at is not None else None
+    trailing_margin = (
+        round(max(0.0, duration - last_spoken_at), 3)
+        if last_spoken_at is not None
+        else None
+    )
+    edge_cut_risk = bool(
+        segments
+        and (
+            leading_margin < SOURCE_AUDIO_EDGE_MARGIN_SECONDS
+            or trailing_margin < SOURCE_AUDIO_EDGE_MARGIN_SECONDS
+        )
+    )
+    reasons: list[str] = []
+    if not expected_text:
+        reasons.append("source-video 장면의 예상 대사인 narration이 비어 있습니다.")
+    if not actual_text:
+        reasons.append("전사된 발화가 없습니다.")
+    elif not match["passed"]:
+        reasons.append("전사 결과가 storyboard narration의 예상 대사를 충분히 포함하지 않습니다.")
+    if edge_cut_risk:
+        reasons.append("첫 발화 또는 마지막 발화가 컷 경계 0.15초 안에 있어 잘릴 위험이 있습니다.")
+    timing_available = bool(segments)
+    if not timing_available and not timing_confirmed:
+        reasons.append("발화 시간 정보가 없어 컷 경계를 확인하지 못했습니다.")
+    status = "passed"
+    if not expected_text or not actual_text or not match["passed"] or edge_cut_risk:
+        status = "mismatch"
+    elif not timing_available and not timing_confirmed:
+        status = "review_required"
+    return {
+        "scene_id": scene_id,
+        "source_path": source_path,
+        "source_sha256": source_sha256,
+        "video_start": round(video_start, 3),
+        "duration": round(duration, 3),
+        "expected_text": expected_text,
+        "transcript_text": actual_text,
+        "segments": segments,
+        "match": match,
+        "timing_available": timing_available,
+        "timing_confirmed": bool(timing_confirmed),
+        "leading_margin_seconds": leading_margin,
+        "trailing_margin_seconds": trailing_margin,
+        "edge_cut_risk": edge_cut_risk,
+        "status": status,
+        "reasons": reasons,
+    }
+
+
+def validate_source_audio_review(
+    project_dir: Path,
+    scenes: list[dict],
+    *,
+    final: bool,
+) -> tuple[list[str], list[str]]:
+    errors: list[str] = []
+    warnings: list[str] = []
+    source_scenes = [scene for scene in scenes if scene_uses_source_video_audio(scene)]
+    if not source_scenes:
+        return errors, warnings
+    target = errors if final else warnings
+    review_path = project_dir / SOURCE_AUDIO_REVIEW_FILENAME
+    if not review_path.is_file():
+        target.append(
+            f"source-video 장면의 음성 전사 검토가 없습니다: {SOURCE_AUDIO_REVIEW_FILENAME}. "
+            "review-source-audio를 먼저 실행하세요."
+        )
+        return errors, warnings
+    try:
+        review = load_json(review_path)
+    except News2ShortsError as exc:
+        target.append(str(exc))
+        return errors, warnings
+    if not isinstance(review, dict):
+        target.append(f"지원하지 않는 source audio review 형식입니다: {SOURCE_AUDIO_REVIEW_FILENAME}")
+        return errors, warnings
+    try:
+        review_version = int(review.get("version") or 0)
+    except (TypeError, ValueError):
+        review_version = 0
+    if review_version != SOURCE_AUDIO_REVIEW_VERSION:
+        target.append(f"지원하지 않는 source audio review 형식입니다: {SOURCE_AUDIO_REVIEW_FILENAME}")
+        return errors, warnings
+    raw_reviews = review.get("scenes")
+    if not isinstance(raw_reviews, list):
+        target.append(f"{SOURCE_AUDIO_REVIEW_FILENAME}의 scenes는 배열이어야 합니다.")
+        return errors, warnings
+    by_scene_id = {
+        str(item.get("scene_id") or "").strip(): item
+        for item in raw_reviews
+        if isinstance(item, dict) and str(item.get("scene_id") or "").strip()
+    }
+    for index, scene in enumerate(source_scenes, start=1):
+        scene_id = str(scene.get("id") or f"source-scene-{index:02d}").strip()
+        item = by_scene_id.get(scene_id)
+        if item is None:
+            target.append(f"source-video 장면의 음성 전사 검토가 누락됐습니다: {scene_id}")
+            continue
+        source_value = str(scene.get("video") or "").strip()
+        if str(item.get("source_path") or "").strip() != source_value:
+            target.append(f"source-video 음성 검토의 자산 경로가 변경됐습니다: {scene_id}")
+            continue
+        try:
+            source_path = resolve_project_file(project_dir, source_value)
+            source_hash = file_sha256(source_path)
+        except News2ShortsError as exc:
+            target.append(str(exc))
+            continue
+        if str(item.get("source_sha256") or "") != source_hash:
+            target.append(f"source-video 음성 검토 후 영상 파일이 변경됐습니다: {scene_id}")
+        try:
+            current_start = round(max(0.0, float(scene.get("video_start") or 0.0)), 3)
+            current_duration = round(max(0.0, float(scene.get("duration") or 0.0)), 3)
+            reviewed_start = round(float(item.get("video_start") or 0.0), 3)
+            reviewed_duration = round(float(item.get("duration") or 0.0), 3)
+        except (TypeError, ValueError):
+            target.append(f"source-video 음성 검토의 컷 시간이 잘못됐습니다: {scene_id}")
+            continue
+        if current_start != reviewed_start or current_duration != reviewed_duration:
+            target.append(f"source-video 음성 검토 후 컷 시작점 또는 길이가 변경됐습니다: {scene_id}")
+        if normalize_source_dialogue(item.get("expected_text")) != normalize_source_dialogue(
+            scene.get("narration")
+        ):
+            target.append(f"source-video 음성 검토 후 예상 대사가 변경됐습니다: {scene_id}")
+        status = str(item.get("status") or "").strip()
+        if status != "passed":
+            reasons = item.get("reasons") if isinstance(item.get("reasons"), list) else []
+            reason_text = "; ".join(str(reason) for reason in reasons if str(reason).strip())
+            suffix = f": {reason_text}" if reason_text else ""
+            target.append(f"source-video 음성 전사 검토 미통과: {scene_id}{suffix}")
+    return errors, warnings
+
+
 def brand_intro_config(project: dict) -> dict:
     configured = project.get("brand_intro")
+    try:
+        project_version = int(project.get("version") or 1)
+    except (TypeError, ValueError):
+        project_version = 1
     result = {
         "enabled": True,
+        "mode": BRAND_MODE_CORNER_LOGO if project_version >= 16 else BRAND_MODE_LEGACY_FULL,
         "asset": BRAND_INTRO_ASSET_ID,
+        "position": "top-left",
         "transition": DEFAULT_BRAND_INTRO_TRANSITION,
         "transition_duration": DEFAULT_BRAND_INTRO_TRANSITION_DURATION,
     }
@@ -2123,6 +3046,8 @@ def brand_intro_lead_in_seconds(project: dict) -> float:
     config = brand_intro_config(project)
     if config.get("enabled") is not True:
         return 0.0
+    if str(config.get("mode") or BRAND_MODE_LEGACY_FULL).strip() == BRAND_MODE_CORNER_LOGO:
+        return 0.0
     try:
         transition_duration = float(
             config.get("transition_duration") or DEFAULT_BRAND_INTRO_TRANSITION_DURATION
@@ -2130,6 +3055,17 @@ def brand_intro_lead_in_seconds(project: dict) -> float:
     except (TypeError, ValueError):
         transition_duration = DEFAULT_BRAND_INTRO_TRANSITION_DURATION
     return max(0.0, BRAND_INTRO_SOURCE_DURATION_SECONDS - transition_duration)
+
+
+def audio_bed_config(project: dict) -> dict:
+    configured = project.get("audio_bed")
+    return configured if isinstance(configured, dict) else {
+        "enabled": False,
+        "mode": "none",
+        "profile": "",
+        "vocals": False,
+        "path": "",
+    }
 
 
 def requested_scene_start_seconds(scenes: list[dict], scene_id: str) -> float | None:
@@ -2144,6 +3080,73 @@ def requested_scene_start_seconds(scenes: list[dict], scene_id: str) -> float | 
         except (TypeError, ValueError):
             elapsed += CONTINUOUS_FLOW_MIN_SCENE_SECONDS
     return None
+
+
+def retention_timing_report(project: dict, scene_reports: list[dict]) -> dict:
+    try:
+        project_version = int(project.get("version") or 1)
+    except (TypeError, ValueError):
+        project_version = 1
+    if project_version < 16:
+        return {
+            "not_applicable": True,
+            "reason": "project-version-before-16",
+            "passed": True,
+        }
+    profile = shorts_profile_config(project)
+    delivery_mode = str(project.get("delivery_mode") or CONTINUOUS_FLOW_MODE).strip()
+    deadlines = {
+        "first_answer": (
+            VISUAL_FIRST_ANSWER_DEADLINE_SECONDS
+            if delivery_mode == VISUAL_FIRST_MODE
+            else CONTINUOUS_FLOW_ANSWER_DEADLINE_SECONDS
+        ),
+        "truth_guard": TRUTH_GUARD_DEADLINE_SECONDS,
+    }
+    report_by_id = {
+        str(item.get("id") or "").strip(): item
+        for item in scene_reports
+        if isinstance(item, dict) and str(item.get("id") or "").strip()
+    }
+    lead_in = brand_intro_lead_in_seconds(project)
+    events: dict[str, dict] = {}
+    for event, field in (
+        ("first_answer", "first_answer_scene_id"),
+        ("truth_guard", "truth_guard_scene_id"),
+    ):
+        scene_id = str(profile.get(field) or "").strip()
+        scene_report = report_by_id.get(scene_id)
+        if not scene_id or scene_report is None:
+            events[event] = {
+                "scene_id": scene_id,
+                "actual_start": None,
+                "deadline": deadlines[event],
+                "passed": False,
+            }
+            continue
+        raw_start = scene_report.get("timeline_start")
+        try:
+            actual_start = lead_in + float(raw_start)
+        except (TypeError, ValueError):
+            actual_start = None
+        events[event] = {
+            "scene_id": scene_id,
+            "actual_start": round(actual_start, 3) if actual_start is not None else None,
+            "deadline": deadlines[event],
+            "passed": bool(actual_start is not None and actual_start <= deadlines[event]),
+        }
+    truth_guard_required = bool(str(profile.get("truth_guard") or "").strip())
+    if not truth_guard_required:
+        events["truth_guard"]["passed"] = True
+        events["truth_guard"]["not_applicable"] = True
+    return {
+        "delivery_mode": delivery_mode,
+        "brand_lead_in_seconds": round(lead_in, 3),
+        "events": events,
+        "passed": bool(
+            events["first_answer"]["passed"] and events["truth_guard"]["passed"]
+        ),
+    }
 
 
 def narration_character_count(value: object) -> int:
@@ -2216,6 +3219,19 @@ def render_timing_issues(
                     f"{absolute_start:.1f}/{EARLY_RETENTION_DEADLINE_SECONDS:.1f}초"
                 )
                 (errors if final else warnings).append(message)
+    if project_version >= 16:
+        timing = retention_timing_report(project, scene_reports)
+        for event_name, label in (("first_answer", "첫 답변"), ("truth_guard", "사실 조건")):
+            event = timing["events"][event_name]
+            if event.get("not_applicable") is True or event.get("passed") is True:
+                continue
+            actual_start = event.get("actual_start")
+            deadline = float(event.get("deadline") or 0.0)
+            message = (
+                f"{label} 장면이 실제 유지율 기준을 넘습니다: "
+                f"{actual_start if actual_start is not None else 'unknown'}/{deadline:.1f}초"
+            )
+            (errors if final else warnings).append(message)
     for item in scene_reports:
         scene_id = str(item.get("id") or "unknown")
         beat = str(item.get("beat") or "")
@@ -2843,6 +3859,37 @@ def render_retention_overlay(scene: dict, project: dict, destination: Path, *, d
     build_retention_overlay(scene, project, draft=draft).save(destination, format="PNG", optimize=True)
 
 
+def render_source_video_overlay(scene: dict, destination: Path) -> None:
+    """Draw provenance only, leaving source video and embedded captions unobstructed."""
+
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError as exc:
+        raise News2ShortsError("Pillow가 필요합니다. doctor 결과를 확인하세요.") from exc
+
+    width, height = 1080, 1920
+    overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    font = load_font_face(find_font(), 27)
+    credit = str(scene.get("credit") or scene.get("source_label") or "").strip()
+    if credit:
+        lines = wrap_text(draw, credit, font, 940)[:1]
+        if lines:
+            text = lines[0]
+            box = draw.textbbox((0, 0), text, font=font)
+            text_width = box[2] - box[0]
+            text_height = box[3] - box[1]
+            left = 28
+            top = height - text_height - 40
+            draw.rounded_rectangle(
+                (left - 10, top - 7, left + text_width + 10, top + text_height + 7),
+                radius=8,
+                fill=(0, 0, 0, 132),
+            )
+            draw.text((left, top), text, font=font, fill=(255, 255, 255, 224))
+    overlay.save(destination, format="PNG", optimize=True)
+
+
 def render_frame(
     scene: dict,
     project: dict,
@@ -2901,6 +3948,64 @@ def create_silent_audio(path: Path, duration: float) -> None:
     )
 
 
+def create_news_pulse_audio(path: Path, duration: float) -> None:
+    duration = max(1.0, float(duration))
+    fade_out_start = max(0.0, duration - 0.4)
+    run_command(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            f"sine=frequency=110:sample_rate=48000:duration={duration:.3f}",
+            "-af",
+            (
+                "tremolo=f=2.0:d=0.55,lowpass=f=900,volume=1.0,"
+                f"afade=t=in:st=0:d=0.20,afade=t=out:st={fade_out_start:.3f}:d=0.40"
+            ),
+            "-ac",
+            "2",
+            "-c:a",
+            "pcm_s16le",
+            "-y",
+            str(path),
+        ]
+    )
+
+
+def record_generated_background_music(manifest: dict, duration: float) -> None:
+    assets = manifest.get("assets")
+    if not isinstance(assets, list):
+        assets = []
+        manifest["assets"] = assets
+    assets[:] = [
+        item
+        for item in assets
+        if not isinstance(item, dict)
+        or str(item.get("path") or "").strip() != VISUAL_FIRST_AUDIO_PATH
+    ]
+    assets.append(
+        {
+            "id": "audio-background-music",
+            "path": VISUAL_FIRST_AUDIO_PATH,
+            "kind": "generated",
+            "media_type": "audio",
+            "usage_role": "background-music",
+            "permission_status": "owned",
+            "approved": True,
+            "synthetic": True,
+            "vocals": False,
+            "profile": VISUAL_FIRST_AUDIO_PROFILE,
+            "source_method": "renderer-generated",
+            "duration": round(float(duration), 3),
+            "retrieved_at": iso_now(),
+        }
+    )
+
+
 def typecast_api_key() -> str:
     api_key, _ = typecast_api_key_record()
     if not api_key:
@@ -2921,6 +4026,67 @@ def typecast_api_key() -> str:
             "Typecast API 키가 없습니다. TYPECAST_API_KEY 환경변수를 설정한 뒤 doctor로 확인하세요."
         )
     return api_key
+
+
+def trim_typecast_outer_silence(path: Path) -> None:
+    """Keep short edge pauses while preserving every pause inside the narration."""
+
+    trimmed = path.with_name(f".{path.stem}-outer-trim.wav")
+    source_duration = audio_duration(path)
+    if not math.isfinite(source_duration) or not 0.05 < source_duration <= 180.0:
+        raise News2ShortsError(
+            f"Typecast 원본 WAV 길이가 비정상입니다: {source_duration:.3f}초"
+        )
+    audio_filter = (
+        "silenceremove="
+        "start_periods=1:"
+        "start_duration=0.05:"
+        f"start_threshold={TYPECAST_SILENCE_THRESHOLD_DB}dB:"
+        f"start_silence={TYPECAST_LEADING_SILENCE_KEEP_SECONDS},"
+        "areverse,"
+        "silenceremove="
+        "start_periods=1:"
+        "start_duration=0.05:"
+        f"start_threshold={TYPECAST_SILENCE_THRESHOLD_DB}dB:"
+        f"start_silence={TYPECAST_TRAILING_SILENCE_KEEP_SECONDS},"
+        "areverse"
+    )
+    try:
+        run_command(
+            [
+                "ffmpeg",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-t",
+                f"{source_duration:.3f}",
+                "-i",
+                str(path),
+                "-af",
+                audio_filter,
+                "-ac",
+                "2",
+                "-ar",
+                "48000",
+                "-t",
+                f"{source_duration:.3f}",
+                "-c:a",
+                "pcm_s16le",
+                "-y",
+                str(trimmed),
+            ]
+        )
+        trimmed_duration = audio_duration(trimmed)
+        if trimmed_duration <= 0.05:
+            raise News2ShortsError("Typecast 외곽 무음 정리 후 음성이 비었습니다.")
+        if trimmed_duration > source_duration + 0.5:
+            raise News2ShortsError(
+                "Typecast 외곽 무음 정리 결과가 원본보다 비정상적으로 깁니다: "
+                f"{trimmed_duration:.3f}/{source_duration:.3f}초"
+            )
+        os.replace(trimmed, path)
+    finally:
+        trimmed.unlink(missing_ok=True)
 
 
 def typecast_audio(
@@ -3002,6 +4168,7 @@ def typecast_audio(
     if len(audio) < 12 or audio[:4] != b"RIFF" or audio[8:12] != b"WAVE":
         raise News2ShortsError("Typecast TTS 응답이 WAV 오디오가 아닙니다.")
     path.write_bytes(audio)
+    trim_typecast_outer_silence(path)
 
 
 def scene_audio(
@@ -3065,6 +4232,7 @@ def continuous_flow_audio(
     rate: int,
     typecast_voice_id: str,
     typecast_tempo: float,
+    output_stem: str = "continuous-flow",
 ) -> tuple[Path, float, str]:
     narrations = [
         suppress_editorial_identifiers(str(scene.get("narration") or "")).strip()
@@ -3077,12 +4245,12 @@ def continuous_flow_audio(
         sum(max(1.0, float(scene.get("duration") or 0.0)) for scene in scenes),
     )
     if no_tts or not narration:
-        path = work_dir / "continuous-flow-silent.wav"
+        path = work_dir / f"{output_stem}-silent.wav"
         create_silent_audio(path, requested)
         return path, requested, "silent-continuous"
 
     if tts_provider == "typecast":
-        path = work_dir / "continuous-flow-typecast.wav"
+        path = work_dir / f"{output_stem}-typecast.wav"
         typecast_audio(
             path,
             narration,
@@ -3099,7 +4267,7 @@ def continuous_flow_audio(
         raise News2ShortsError(
             "로컬 TTS를 찾지 못했습니다. Typecast를 사용하거나 --no-tts를 사용하세요."
         )
-    path = work_dir / "continuous-flow-narration.aiff"
+    path = work_dir / f"{output_stem}-narration.aiff"
     run_command([say, "-v", voice, "-r", str(rate), "-o", str(path), narration])
     return path, audio_duration(path), "local-continuous"
 
@@ -3124,6 +4292,59 @@ def continuous_flow_scene_durations(scenes: list[dict], audio_seconds: float) ->
     ]
     durations[-1] += target - sum(durations)
     return durations
+
+
+def estimated_continuous_flow_scene_reports(
+    project: dict,
+    scenes: list[dict],
+) -> list[dict]:
+    """Build a pre-TTS timing estimate solely for choosing a safe CTA scene boundary."""
+
+    durations = [
+        max(
+            CONTINUOUS_FLOW_PAYOFF_MIN_SECONDS
+            if str(scene.get("beat") or "").strip() == "payoff"
+            else CONTINUOUS_FLOW_MIN_SCENE_SECONDS,
+            float(scene.get("duration") or 0.0),
+        )
+        for scene in scenes
+    ]
+    total = sum(durations)
+    try:
+        target = float(project.get("target_duration_seconds") or 0.0)
+    except (TypeError, ValueError):
+        target = 0.0
+    if durations and target > total > 0.0:
+        scale = target / total
+        durations = [duration * scale for duration in durations]
+
+    reports: list[dict] = []
+    cursor = 0.0
+    for duration in durations:
+        reports.append(
+            {
+                "timeline_start": round(cursor, 3),
+                "timeline_end": round(cursor + duration, 3),
+            }
+        )
+        cursor += duration
+    return reports
+
+
+def continuous_flow_audio_group_ranges(
+    scene_count: int,
+    mid_cta_selection: dict,
+) -> list[tuple[int, int]]:
+    """Keep every CTA edge between complete continuous-flow TTS requests."""
+
+    if scene_count <= 0:
+        return []
+    if mid_cta_selection.get("enabled") is not True:
+        return [(0, scene_count)]
+    split_index = int(mid_cta_selection.get("insert_after_scene_index") or 0)
+    if not 0 < split_index < scene_count:
+        raise News2ShortsError("중간 CTA는 앞뒤 뉴스 장면이 모두 있는 경계에만 넣을 수 있습니다.")
+    return [(0, split_index), (split_index, scene_count)]
 
 
 def extract_audio_segment(
@@ -3157,6 +4378,143 @@ def extract_audio_segment(
             str(destination),
         ]
     )
+
+
+def cmd_review_source_audio(args: argparse.Namespace) -> int:
+    project_dir = Path(args.project_dir).expanduser().resolve()
+    if not project_dir.is_dir():
+        fail(f"프로젝트 디렉터리를 찾을 수 없습니다: {project_dir}")
+    storyboard = load_json(project_dir / "storyboard.json")
+    if not isinstance(storyboard, dict) or not isinstance(storyboard.get("scenes"), list):
+        raise News2ShortsError("storyboard.json의 scenes는 배열이어야 합니다.")
+    requested_scene_ids = {str(value).strip() for value in (args.scene_id or []) if str(value).strip()}
+    source_scenes = [
+        scene
+        for scene in storyboard["scenes"]
+        if isinstance(scene, dict)
+        and scene_uses_source_video_audio(scene)
+        and (
+            not requested_scene_ids
+            or str(scene.get("id") or "").strip() in requested_scene_ids
+        )
+    ]
+    if requested_scene_ids:
+        found = {str(scene.get("id") or "").strip() for scene in source_scenes}
+        missing = sorted(requested_scene_ids - found)
+        if missing:
+            raise News2ShortsError(
+                "source-video 장면을 찾지 못했습니다: " + ", ".join(missing)
+            )
+    if not source_scenes:
+        raise News2ShortsError("검토할 audio_mode: source-video 장면이 없습니다.")
+
+    scene_ids = [str(scene.get("id") or "").strip() for scene in source_scenes]
+    transcript_path: Path | None = None
+    transcript_records: dict[str, dict] = {}
+    backend = str(args.backend or "auto").strip()
+    if args.transcript_file:
+        transcript_path = Path(args.transcript_file).expanduser().resolve()
+        if not transcript_path.is_file():
+            raise News2ShortsError(f"전사 파일을 찾을 수 없습니다: {transcript_path}")
+        transcript_records = load_source_transcript_records(transcript_path, scene_ids)
+        backend = "transcript-file"
+    elif backend == "transcript-file":
+        raise News2ShortsError("transcript-file 백엔드에는 --transcript-file이 필요합니다.")
+    elif backend == "auto":
+        backend = "openai-whisper-cli" if shutil.which("whisper") else ""
+        if not backend:
+            raise News2ShortsError(
+                "source audio transcript_pending: 자동 전사 백엔드가 없습니다. "
+                "로컬 OpenAI Whisper CLI를 준비하거나 --transcript-file을 제공하세요."
+            )
+    elif backend == "openai-whisper-cli" and not shutil.which("whisper"):
+        raise News2ShortsError("로컬 OpenAI Whisper CLI 실행 파일을 찾지 못했습니다: whisper")
+
+    reviews: list[dict] = []
+    with tempfile.TemporaryDirectory(prefix="news2shorts-source-audio-") as temp_name:
+        temp_dir = Path(temp_name)
+        for index, scene in enumerate(source_scenes, start=1):
+            scene_id = str(scene.get("id") or f"source-scene-{index:02d}").strip()
+            source_value = str(scene.get("video") or "").strip()
+            source_path = resolve_project_file(project_dir, source_value)
+            start = max(0.0, float(scene.get("video_start") or 0.0))
+            duration = max(0.0, float(scene.get("duration") or 0.0))
+            if duration <= 0:
+                raise News2ShortsError(f"source-video 장면 duration은 0보다 커야 합니다: {scene_id}")
+            audio_path = temp_dir / f"{scene_id}.wav"
+            extract_audio_segment(source_path, audio_path, start=start, duration=duration)
+            if backend == "transcript-file":
+                transcript = transcript_records.get(scene_id)
+                if transcript is None and len(source_scenes) == 1:
+                    transcript = transcript_records.get("*")
+                if transcript is None:
+                    raise News2ShortsError(f"전사 파일에 장면 기록이 없습니다: {scene_id}")
+            else:
+                transcript = run_whisper_source_transcription(
+                    audio_path,
+                    output_dir=temp_dir / "whisper",
+                    language=args.language,
+                    model=args.model,
+                    model_dir=Path(args.model_dir).expanduser().resolve(),
+                    allow_model_download=args.allow_model_download,
+                )
+            reviews.append(
+                build_source_audio_scene_review(
+                    scene,
+                    source_path=source_value,
+                    source_sha256=file_sha256(source_path),
+                    transcript=transcript,
+                    timing_confirmed=args.confirm_timing_reviewed,
+                )
+            )
+
+    passed = all(review["status"] == "passed" for review in reviews)
+    report = {
+        "version": SOURCE_AUDIO_REVIEW_VERSION,
+        "generated_at": iso_now(),
+        "status": "passed" if passed else "review_required",
+        "backend": backend,
+        "language": args.language,
+        "model": args.model if backend == "openai-whisper-cli" else "",
+        "transcript_input": (
+            {
+                "name": transcript_path.name,
+                "sha256": file_sha256(transcript_path),
+            }
+            if transcript_path is not None
+            else None
+        ),
+        "scene_count": len(reviews),
+        "scenes": reviews,
+        "publication_claim_boundary": (
+            "전사는 영상 속 발화 검토용이며 화자의 신원이나 발언의 사실성을 증명하지 않습니다."
+        ),
+    }
+    output_path = project_dir / SOURCE_AUDIO_REVIEW_FILENAME
+    write_json(output_path, report)
+    print(
+        json.dumps(
+            {
+                "project_dir": str(project_dir),
+                "report": SOURCE_AUDIO_REVIEW_FILENAME,
+                "status": report["status"],
+                "backend": backend,
+                "scenes": [
+                    {
+                        "scene_id": review["scene_id"],
+                        "status": review["status"],
+                        "expected_text": review["expected_text"],
+                        "transcript_text": review["transcript_text"],
+                        "reasons": review["reasons"],
+                    }
+                    for review in reviews
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0 if passed else 2
 
 
 def mux_continuous_audio(video: Path, audio: Path, destination: Path) -> None:
@@ -3436,6 +4794,97 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
     if not isinstance(visual_sourcing, dict):
         errors.append("project.json의 visual_sourcing은 객체여야 합니다.")
         visual_sourcing = {}
+    source_priority = visual_sourcing.get("source_priority")
+    if source_priority is not None:
+        if not isinstance(source_priority, list) or not all(
+            isinstance(value, str) and value.strip() for value in source_priority
+        ):
+            errors.append("visual_sourcing.source_priority는 비어 있지 않은 문자열 배열이어야 합니다.")
+        elif tuple(source_priority) != DEFAULT_VISUAL_SOURCE_PRIORITY:
+            errors.append(
+                "visual_sourcing.source_priority는 뉴스 기사, 공개 커뮤니티, 공식 자료, "
+                "라이선스 자료, 생성 보완 순서여야 합니다."
+            )
+        if visual_sourcing.get("prefer_current_news_and_community_visuals") is not True:
+            errors.append(
+                "visual_sourcing.source_priority를 사용하면 "
+                "prefer_current_news_and_community_visuals=true가 필요합니다."
+            )
+        if visual_sourcing.get("community_visual_privacy_review_required") is not True:
+            errors.append(
+                "공개 커뮤니티 이미지를 우선 탐색하면 "
+                "community_visual_privacy_review_required=true가 필요합니다."
+            )
+    korean_visuals_required = visual_sourcing.get("korean_visuals_required") is True
+    international_visuals = visual_sourcing.get("international_source_visuals")
+    international_visuals_enabled = (
+        isinstance(international_visuals, dict)
+        and international_visuals.get("enabled") is True
+    )
+    if korean_visuals_required:
+        if str(visual_sourcing.get("visual_locale") or "").strip() != DEFAULT_VISUAL_LOCALE:
+            errors.append("한국 이미지 전용 프로젝트는 visual_sourcing.visual_locale=ko-KR이 필요합니다.")
+        if (
+            str(visual_sourcing.get("foreign_visual_fallback") or "").strip()
+            != DEFAULT_FOREIGN_VISUAL_FALLBACK
+        ):
+            errors.append(
+                "한국 이미지 전용 프로젝트는 visual_sourcing.foreign_visual_fallback=blocked가 필요합니다."
+            )
+        if visual_sourcing.get("korean_context_review_required") is not True:
+            errors.append(
+                "한국 이미지 전용 프로젝트는 korean_context_review_required=true가 필요합니다."
+            )
+        if (
+            str(visual_sourcing.get("generated_style") or "").strip()
+            != DEFAULT_KOREAN_GENERATED_STYLE
+        ):
+            errors.append(
+                "한국 이미지 전용 프로젝트의 generated_style은 korean-editorial-realism이어야 합니다."
+            )
+    elif international_visuals_enabled:
+        assert isinstance(international_visuals, dict)
+        if str(visual_sourcing.get("visual_locale") or "").strip() != INTERNATIONAL_VISUAL_LOCALE:
+            errors.append(
+                "국제 실제사건 프로젝트는 visual_sourcing.visual_locale=mixed-source가 필요합니다."
+            )
+        if (
+            str(visual_sourcing.get("foreign_visual_fallback") or "").strip()
+            != INTERNATIONAL_FOREIGN_VISUAL_FALLBACK
+        ):
+            errors.append(
+                "국제 실제사건 프로젝트는 foreign_visual_fallback=source-event-only가 필요합니다."
+            )
+        if visual_sourcing.get("korean_context_review_required") is not False:
+            errors.append(
+                "국제 실제사건 프로젝트는 korean_context_review_required=false가 필요합니다."
+            )
+        if (
+            str(visual_sourcing.get("generated_style") or "").strip()
+            != INTERNATIONAL_GENERATED_STYLE
+        ):
+            errors.append(
+                "국제 실제사건 프로젝트의 generated_style은 source-event-explainer여야 합니다."
+            )
+        source_country = str(international_visuals.get("source_country") or "").strip().upper()
+        source_locale = str(international_visuals.get("source_locale") or "").strip()
+        citizen_stake = str(international_visuals.get("citizen_stake") or "").strip()
+        if not re.fullmatch(r"[A-Z]{2}", source_country):
+            errors.append("국제 실제사건 프로젝트에는 ISO 2자리 source_country가 필요합니다.")
+        if len(source_locale) < 2:
+            errors.append("국제 실제사건 프로젝트에는 source_locale이 필요합니다.")
+        if len(re.sub(r"\s+", "", citizen_stake)) < 8:
+            errors.append("국제 실제사건 프로젝트에는 한국 시민 이해관계가 필요합니다.")
+        if international_visuals.get("actual_event_only") is not True:
+            errors.append("국제 실제사건 프로젝트는 actual_event_only=true여야 합니다.")
+        if international_visuals.get("rights_review_required") is not True:
+            errors.append("국제 실제사건 프로젝트는 rights_review_required=true여야 합니다.")
+    visual_mode = str(visual_sourcing.get("mode") or "standard").strip()
+    if visual_mode not in VISUAL_MODES:
+        errors.append(
+            "visual_sourcing.mode는 standard, hot-real-news, whiteboard 중 하나여야 합니다."
+        )
+        visual_mode = "standard"
 
     configured_generated_ratio = visual_sourcing.get("max_generated_scene_ratio", 0.4)
     try:
@@ -3446,6 +4895,18 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
     if not 0 <= max_generated_scene_ratio <= 1:
         errors.append("visual_sourcing.max_generated_scene_ratio는 0과 1 사이여야 합니다.")
         max_generated_scene_ratio = 0.4
+
+    configured_real_media_ratio = visual_sourcing.get(
+        "min_real_media_ratio", DEFAULT_MIN_REAL_MEDIA_RATIO
+    )
+    try:
+        min_real_media_ratio = float(configured_real_media_ratio)
+    except (TypeError, ValueError):
+        errors.append("visual_sourcing.min_real_media_ratio는 0과 1 사이 숫자여야 합니다.")
+        min_real_media_ratio = DEFAULT_MIN_REAL_MEDIA_RATIO
+    if not 0 <= min_real_media_ratio <= 1:
+        errors.append("visual_sourcing.min_real_media_ratio는 0과 1 사이여야 합니다.")
+        min_real_media_ratio = DEFAULT_MIN_REAL_MEDIA_RATIO
 
     voice_config = project.get("narration_voice")
     if voice_config is not None:
@@ -3467,6 +4928,11 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
 
     style = visual_style_config(project)
     style_template = str(style.get("template") or "classic-card")
+    render_mode = str(style.get("render_mode") or visual_mode).strip()
+    if render_mode not in VISUAL_MODES:
+        errors.append("visual_style.render_mode가 지원되지 않습니다.")
+    elif render_mode != visual_mode:
+        errors.append("visual_style.render_mode와 visual_sourcing.mode가 일치해야 합니다.")
     try:
         project_version = int(project.get("version") or 1)
     except (TypeError, ValueError):
@@ -3487,11 +4953,24 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
     strict_payoff_retention = project_version >= 11 and storyboard_version >= 6
     strict_continuous_flow = project_version >= 12
     strict_early_retention = project_version >= 13 and storyboard_version >= 6
+    strict_real_media_majority = project_version >= 14
+    strict_v16_retention = project_version >= 16 and storyboard_version >= 6
+    strict_v17_mid_cta = project_version >= 17 and storyboard_version >= 6
+    delivery_mode = str(project.get("delivery_mode") or "").strip()
+    visual_first = strict_v16_retention and delivery_mode == VISUAL_FIRST_MODE
+    errors.extend(validate_narration_style(project, scenes))
+    if strict_v16_retention and not (korean_visuals_required or international_visuals_enabled):
+        errors.append(
+            "version 16 새 프로젝트는 한국 이미지 전용 또는 국제 실제사건 시각 범위가 필요합니다."
+        )
     if strict_continuous_flow:
         if style_template != "quick-reveal":
             errors.append("새 프로젝트의 영상 포맷은 quick-reveal만 지원합니다.")
-        if str(project.get("delivery_mode") or "").strip() != CONTINUOUS_FLOW_MODE:
-            errors.append("새 프로젝트의 delivery_mode는 continuous-flow여야 합니다.")
+        if strict_v16_retention:
+            if delivery_mode not in DELIVERY_MODES:
+                errors.append("새 프로젝트의 delivery_mode는 continuous-flow 또는 visual-first여야 합니다.")
+        elif delivery_mode != CONTINUOUS_FLOW_MODE:
+            errors.append("version 15 이하 새 프로젝트의 delivery_mode는 continuous-flow여야 합니다.")
         if str(storyboard.get("format") or "").strip() != "quick-reveal":
             errors.append("새 storyboard.format은 quick-reveal이어야 합니다.")
     configured_brand_intro = project.get("brand_intro")
@@ -3503,6 +4982,11 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
     brand_intro = brand_intro_config(project)
     if brand_intro.get("enabled") is not True:
         errors.append("공통 인트로는 항상 enabled=true여야 합니다.")
+    brand_mode = str(brand_intro.get("mode") or BRAND_MODE_LEGACY_FULL).strip()
+    if brand_mode not in ALLOWED_BRAND_MODES:
+        errors.append("brand_intro.mode는 corner-logo 또는 legacy-full이어야 합니다.")
+    if strict_v16_retention and brand_mode != BRAND_MODE_CORNER_LOGO:
+        errors.append("version 16 새 프로젝트는 brand_intro.mode=corner-logo여야 합니다.")
     brand_asset_id = str(brand_intro.get("asset") or "").strip()
     brand_asset_path = brand_intro_asset_path(brand_asset_id)
     if brand_asset_path is None:
@@ -3510,21 +4994,108 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
             "공통 인트로 asset은 "
             f"{', '.join(sorted(ALLOWED_BRAND_INTRO_ASSET_IDS))} 중 하나여야 합니다."
         )
-    transition = str(brand_intro.get("transition") or "").strip()
-    if transition not in ALLOWED_BRAND_INTRO_TRANSITIONS:
-        errors.append(
-            "brand_intro.transition은 "
-            f"{', '.join(sorted(ALLOWED_BRAND_INTRO_TRANSITIONS))}만 지원합니다."
-        )
-    try:
-        transition_duration = float(brand_intro.get("transition_duration") or 0.0)
-        if not MIN_BRAND_INTRO_TRANSITION_DURATION <= transition_duration <= MAX_BRAND_INTRO_TRANSITION_DURATION:
+    if brand_mode == BRAND_MODE_CORNER_LOGO:
+        if not BRAND_LOGO_PATH.is_file():
+            errors.append(f"corner-logo 자산이 없습니다: {BRAND_LOGO_PATH}")
+        if str(brand_intro.get("position") or "").strip() != "top-left":
+            errors.append("corner-logo position은 top-left여야 합니다.")
+    else:
+        transition = str(brand_intro.get("transition") or "").strip()
+        if transition not in ALLOWED_BRAND_INTRO_TRANSITIONS:
             errors.append(
-                "brand_intro.transition_duration은 "
-                f"{MIN_BRAND_INTRO_TRANSITION_DURATION:.2f}-{MAX_BRAND_INTRO_TRANSITION_DURATION:.2f}초여야 합니다."
+                "brand_intro.transition은 "
+                f"{', '.join(sorted(ALLOWED_BRAND_INTRO_TRANSITIONS))}만 지원합니다."
             )
-    except (TypeError, ValueError):
-        errors.append("brand_intro.transition_duration은 숫자여야 합니다.")
+        try:
+            transition_duration = float(brand_intro.get("transition_duration") or 0.0)
+            if not MIN_BRAND_INTRO_TRANSITION_DURATION <= transition_duration <= MAX_BRAND_INTRO_TRANSITION_DURATION:
+                errors.append(
+                    "brand_intro.transition_duration은 "
+                    f"{MIN_BRAND_INTRO_TRANSITION_DURATION:.2f}-{MAX_BRAND_INTRO_TRANSITION_DURATION:.2f}초여야 합니다."
+                )
+        except (TypeError, ValueError):
+            errors.append("brand_intro.transition_duration은 숫자여야 합니다.")
+
+    if strict_v16_retention:
+        audio_bed = audio_bed_config(project)
+        if visual_first:
+            if audio_bed.get("enabled") is not True:
+                errors.append("visual-first에는 audio_bed.enabled=true가 필요합니다.")
+            if str(audio_bed.get("mode") or "").strip() != "renderer-generated":
+                errors.append("visual-first audio_bed.mode는 renderer-generated여야 합니다.")
+            if str(audio_bed.get("profile") or "").strip() != VISUAL_FIRST_AUDIO_PROFILE:
+                errors.append(f"visual-first audio_bed.profile은 {VISUAL_FIRST_AUDIO_PROFILE}여야 합니다.")
+            if audio_bed.get("vocals") is not False:
+                errors.append("visual-first audio_bed.vocals는 false여야 합니다.")
+            if str(audio_bed.get("path") or "").strip() != VISUAL_FIRST_AUDIO_PATH:
+                errors.append(f"visual-first audio_bed.path는 {VISUAL_FIRST_AUDIO_PATH}여야 합니다.")
+        elif audio_bed.get("enabled") is not False:
+            errors.append("continuous-flow v16 기본 audio_bed는 enabled=false여야 합니다.")
+    if strict_v17_mid_cta:
+        mid_target = errors if final else warnings
+        configured_mid_cta = project.get("mid_cta")
+        if not isinstance(configured_mid_cta, dict):
+            mid_target.append("version 17 프로젝트에는 mid_cta 설정이 필요합니다.")
+        else:
+            mid_cta = mid_cta_config(project)
+            mid_mode = str(mid_cta.get("mode") or "").strip().lower()
+            if mid_mode not in MID_CTA_MODES:
+                errors.append("mid_cta.mode는 auto, enabled, disabled 중 하나여야 합니다.")
+            if str(mid_cta.get("placement") or "") != MID_CTA_PLACEMENT:
+                errors.append(f"mid_cta.placement는 {MID_CTA_PLACEMENT}여야 합니다.")
+            if str(mid_cta.get("style") or "") != MID_CTA_STYLE:
+                errors.append(f"mid_cta.style은 {MID_CTA_STYLE}이어야 합니다.")
+            if str(mid_cta.get("ui_target_profile") or "") != MID_CTA_UI_TARGET_PROFILE:
+                errors.append(
+                    f"mid_cta.ui_target_profile은 {MID_CTA_UI_TARGET_PROFILE}이어야 합니다."
+                )
+            if mid_cta.get("voice_enabled") is not True:
+                errors.append("mid_cta.voice_enabled는 true여야 합니다.")
+            if str(mid_cta.get("voice_delivery") or "") != "verdict":
+                errors.append("mid_cta.voice_delivery는 verdict여야 합니다.")
+            try:
+                mid_min_duration = float(mid_cta.get("min_duration") or 0.0)
+                mid_max_duration = float(mid_cta.get("max_duration") or 0.0)
+                if mid_min_duration != MID_CTA_MIN_DURATION or mid_max_duration != MID_CTA_MAX_DURATION:
+                    errors.append(
+                        f"mid_cta 길이는 {MID_CTA_MIN_DURATION:.1f}-{MID_CTA_MAX_DURATION:.1f}초여야 합니다."
+                    )
+            except (TypeError, ValueError):
+                errors.append("mid_cta min_duration과 max_duration은 숫자여야 합니다.")
+            arrow_target = mid_cta.get("arrow_target")
+            if not isinstance(arrow_target, dict):
+                errors.append("mid_cta.arrow_target은 x와 y를 가진 객체여야 합니다.")
+            else:
+                try:
+                    target_x = float(arrow_target.get("x"))
+                    target_y = float(arrow_target.get("y"))
+                    if not 0.18 <= target_x <= 0.50 or not 0.78 <= target_y <= 0.92:
+                        errors.append("mid_cta.arrow_target은 Shorts 하단 왼쪽 목표 영역 안에 있어야 합니다.")
+                except (TypeError, ValueError):
+                    errors.append("mid_cta.arrow_target x와 y는 숫자여야 합니다.")
+            for copy_key in ("ordinary_copy", "sensitive_copy"):
+                copy = mid_cta.get(copy_key)
+                if not isinstance(copy, dict):
+                    errors.append(f"mid_cta.{copy_key}는 문구 객체여야 합니다.")
+                    continue
+                for field in ("headline", "emphasis", "subline", "narration"):
+                    value = str(copy.get(field) or "").strip()
+                    if not value:
+                        errors.append(f"mid_cta.{copy_key}.{field}가 필요합니다.")
+                    elif MID_CTA_UNVERIFIED_METRIC_PATTERN.search(value):
+                        errors.append(
+                            f"검증되지 않은 채널 지표 표현은 중간 CTA에 사용할 수 없습니다: {copy_key}.{field}"
+                        )
+            if mid_mode == "enabled":
+                if delivery_mode != CONTINUOUS_FLOW_MODE:
+                    errors.append("mid_cta.mode=enabled는 continuous-flow에서만 사용할 수 있습니다.")
+                try:
+                    if float(project.get("target_duration_seconds") or 0.0) < MID_CTA_MIN_BODY_SECONDS:
+                        errors.append(
+                            f"mid_cta.mode=enabled에는 목표 길이 {MID_CTA_MIN_BODY_SECONDS:.0f}초 이상이 필요합니다."
+                        )
+                except (TypeError, ValueError):
+                    errors.append("target_duration_seconds는 숫자여야 합니다.")
     if brand_asset_path is not None and not brand_asset_path.is_file():
         errors.append(f"공통 인트로 자산이 없습니다: {brand_asset_path}")
     declared_companies: dict[str, dict[str, object]] = {}
@@ -3797,14 +5368,20 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
                     target.append(
                         f"cta_tail.duration은 {MIN_CTA_TAIL_DURATION:.1f}-{MAX_CTA_TAIL_DURATION:.1f}초여야 합니다."
                     )
+                elif strict_v16_retention and cta_duration > DEFAULT_CTA_TAIL_DURATION:
+                    target.append(
+                        f"version 16 cta_tail.duration은 {DEFAULT_CTA_TAIL_DURATION:.1f}초 이하여야 합니다."
+                    )
             except (TypeError, ValueError):
                 target.append("cta_tail.duration은 숫자여야 합니다.")
             if not str(cta_tail.get("headline") or "").strip():
                 target.append("cta_tail.headline이 필요합니다.")
             if not str(cta_tail.get("prompt") or "").strip():
                 target.append("cta_tail.prompt가 필요합니다.")
-            if cta_tail.get("voice_enabled") is False:
+            if cta_tail.get("voice_enabled") is False and not visual_first:
                 target.append("공통 CTA 음성은 voice_enabled=true여야 합니다. 무음 렌더는 --no-tts로 지정하세요.")
+            if visual_first and cta_tail.get("voice_enabled") is not False:
+                target.append("visual-first CTA는 voice_enabled=false여야 합니다.")
             if project_version >= 8:
                 if not str(cta_tail.get("narration") or "").strip():
                     target.append("cta_tail.narration이 필요합니다.")
@@ -3845,6 +5422,7 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
                 )
             )
             first_narration = str(first_scene.get("narration") or "").strip()
+            first_source_audio = scene_uses_source_video_audio(first_scene)
             if len(re.sub(r"\s+", "", hook_stake)) < 8:
                 target.append(
                     "새 퀵리빌은 shorts_profile.hook_stake에 첫 숫자·주장이 왜 중요한지 한 문장으로 적어야 합니다."
@@ -3854,7 +5432,11 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
                     target.append(
                         "퀵리빌 첫 화면이 hook_stake와 연결되지 않습니다. 숫자만 쓰지 말고 결과·공백·부담 등 의미를 함께 보여주세요."
                     )
-                if not has_shared_significant_term(hook_stake, first_narration):
+                if (
+                    not visual_first
+                    and not first_source_audio
+                    and not has_shared_significant_term(hook_stake, first_narration)
+                ):
                     target.append(
                         "퀵리빌 첫 대사가 hook_stake를 설명하지 않습니다. 첫 문장부터 왜 중요한 숫자·주장인지 말하세요."
                     )
@@ -3910,22 +5492,126 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
                 if not isinstance(early_claim_ids, list) or not early_claim_ids:
                     target.append("10초 이내 재후킹 장면에는 새 사실을 뒷받침하는 claim_ids가 필요합니다.")
                 early_narration = str(early_scene.get("narration") or "").strip()
-                if early_rehook and not has_shared_significant_term(early_rehook, early_narration):
-                    target.append("midpoint_rehook의 핵심 표현이 지정 장면 narration에 실제로 말해지지 않습니다.")
+                early_visible_copy = " ".join(
+                    str(early_scene.get(field) or "").strip()
+                    for field in ("headline", "caption", "evidence_label", "evidence_value")
+                )
+                early_delivery_copy = early_visible_copy if visual_first else early_narration
+                if early_rehook and not has_shared_significant_term(early_rehook, early_delivery_copy):
+                    target.append(
+                        "midpoint_rehook의 핵심 표현이 지정 장면 화면 또는 narration에 실제로 드러나지 않습니다."
+                    )
                 if early_rehook and payoff_text and text_similarity(early_rehook, payoff_text) >= 0.8:
                     target.append("10초 재후킹에서 결론을 전부 말하고 있습니다. 새 사실 하나만 밝히고 답의 일부는 남기세요.")
                 early_index = scenes.index(early_scene)
                 early_narration_prefix = " ".join(
-                    str(scene.get("narration") or "").strip()
+                    " ".join(
+                        str(scene.get(field) or "").strip()
+                        for field in (
+                            ("headline", "caption", "evidence_label", "evidence_value")
+                            if visual_first
+                            else ("narration",)
+                        )
+                    )
                     for scene in scenes[: early_index + 1]
                     if isinstance(scene, dict)
                 )
                 if truth_guard and not has_shared_significant_term(truth_guard, early_narration_prefix):
                     target.append(
-                        "truth_guard의 조건·불확실성이 10초 이내 narration에 없습니다. 궁금증 때문에 사실 조건을 숨길 수 없습니다."
+                        "truth_guard의 조건·불확실성이 초반 화면 또는 narration에 없습니다. 궁금증 때문에 사실 조건을 숨길 수 없습니다."
                     )
             if withheld_detail and payoff_text and not has_shared_significant_term(withheld_detail, payoff_text):
                 target.append("withheld_detail은 마지막 payoff에서 실제로 회수되는 답과 연결되어야 합니다.")
+        if strict_v16_retention:
+            scene_ids = {
+                str(scene.get("id") or "").strip()
+                for scene in scenes
+                if isinstance(scene, dict) and str(scene.get("id") or "").strip()
+            }
+            first_answer_scene_id = str(profile.get("first_answer_scene_id") or "").strip()
+            truth_guard_scene_id = str(profile.get("truth_guard_scene_id") or "").strip()
+            truth_guard = str(profile.get("truth_guard") or "").strip()
+            if not first_answer_scene_id:
+                errors.append("version 16 shorts_profile.first_answer_scene_id가 필요합니다.")
+            elif first_answer_scene_id not in scene_ids:
+                errors.append("first_answer_scene_id가 storyboard 장면과 연결되지 않습니다.")
+            else:
+                first_answer_start = requested_scene_start_seconds(scenes, first_answer_scene_id)
+                answer_deadline = (
+                    VISUAL_FIRST_ANSWER_DEADLINE_SECONDS
+                    if visual_first
+                    else CONTINUOUS_FLOW_ANSWER_DEADLINE_SECONDS
+                )
+                if first_answer_start is not None:
+                    first_answer_start += brand_intro_lead_in_seconds(project)
+                    if first_answer_start > answer_deadline:
+                        target.append(
+                            "첫 답변 장면이 유지율 기준을 넘습니다: "
+                            f"{first_answer_start:.1f}/{answer_deadline:.1f}초"
+                        )
+            if truth_guard:
+                if not truth_guard_scene_id:
+                    errors.append("truth_guard가 있으면 shorts_profile.truth_guard_scene_id가 필요합니다.")
+                elif truth_guard_scene_id not in scene_ids:
+                    errors.append("truth_guard_scene_id가 storyboard 장면과 연결되지 않습니다.")
+                else:
+                    truth_guard_start = requested_scene_start_seconds(scenes, truth_guard_scene_id)
+                    if truth_guard_start is not None:
+                        truth_guard_start += brand_intro_lead_in_seconds(project)
+                        if truth_guard_start > TRUTH_GUARD_DEADLINE_SECONDS:
+                            target.append(
+                                "사실 조건 장면이 유지율 기준을 넘습니다: "
+                                f"{truth_guard_start:.1f}/{TRUTH_GUARD_DEADLINE_SECONDS:.1f}초"
+                            )
+            if visual_first:
+                if not VISUAL_FIRST_MIN_SCENES <= len(scenes) <= VISUAL_FIRST_MAX_SCENES:
+                    errors.append(
+                        "visual-first 장면 수는 "
+                        f"{VISUAL_FIRST_MIN_SCENES}-{VISUAL_FIRST_MAX_SCENES}개여야 합니다."
+                    )
+                planned_body = sum(
+                    max(1.0, float(scene.get("duration") or 0.0))
+                    for scene in scenes
+                    if isinstance(scene, dict)
+                )
+                cta_config = project.get("cta_tail")
+                cta_seconds = (
+                    float(cta_config.get("duration") or 0.0)
+                    if isinstance(cta_config, dict) and cta_config.get("enabled") is True
+                    else 0.0
+                )
+                planned_complete = planned_body + cta_seconds
+                if not VISUAL_FIRST_MIN_DURATION_SECONDS <= planned_complete <= VISUAL_FIRST_MAX_DURATION_SECONDS:
+                    target.append(
+                        "visual-first 본문과 CTA 합계는 "
+                        f"{VISUAL_FIRST_MIN_DURATION_SECONDS}-{VISUAL_FIRST_MAX_DURATION_SECONDS}초여야 합니다: "
+                        f"{planned_complete:.1f}초"
+                    )
+                early_state_count = 0
+                cursor = 0.0
+                early_video = False
+                for scene in scenes:
+                    if not isinstance(scene, dict):
+                        continue
+                    if cursor < VISUAL_FIRST_EARLY_WINDOW_SECONDS:
+                        early_state_count += 1
+                        early_video = early_video or bool(str(scene.get("video") or "").strip())
+                    cursor += max(1.0, float(scene.get("duration") or 0.0))
+                if early_state_count < VISUAL_FIRST_MIN_EARLY_STATES and not early_video:
+                    target.append(
+                        "visual-first 첫 3초에는 서로 다른 화면 3개 또는 실제 video 장면이 필요합니다."
+                    )
+                for scene in scenes:
+                    if not isinstance(scene, dict):
+                        continue
+                    scene_id = str(scene.get("id") or "unknown")
+                    if str(scene.get("narration") or "").strip():
+                        errors.append(f"visual-first narration은 비워야 합니다: {scene_id}")
+                    if not str(scene.get("caption") or scene.get("headline") or "").strip():
+                        errors.append(f"visual-first 화면 문구가 필요합니다: {scene_id}")
+                    scene_claim_ids = scene.get("claim_ids")
+                    if not isinstance(scene_claim_ids, list) or not scene_claim_ids:
+                        errors.append(f"visual-first 장면에는 claim_ids가 필요합니다: {scene_id}")
         if style_template != "quick-reveal" and not str(profile.get("midpoint_rehook") or "").strip():
             target.append("집중 유지 프로필에 중간 재후킹이 없습니다.")
         if strict_fact_stack and style.get("show_fact_stack_index") is not True:
@@ -3950,6 +5636,7 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
                 )
             )
             first_narration = str(first_scene.get("narration") or "").strip()
+            first_source_audio = scene_uses_source_video_audio(first_scene)
             hook_text = str(profile.get("hook") or "").strip()
             payoff_text = str(profile.get("payoff") or "").strip()
 
@@ -3961,13 +5648,16 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
                 )
                 if not ends_with_question(hook_text):
                     target.append("새 프로젝트의 선택한 hook은 시민 관점의 구체적인 질문으로 끝나야 합니다.")
-                if not ends_with_question(first_narration):
+                if not visual_first and not first_source_audio and not ends_with_question(first_narration):
                     target.append("새 프로젝트의 첫 내레이션은 설명이 아니라 훅 질문 한 문장으로 끝나야 합니다.")
                 if not any(ends_with_question(value) for value in first_visible_questions):
                     target.append("새 프로젝트의 첫 화면 headline 또는 caption에는 훅 질문이 보여야 합니다.")
-                if is_summary_lead(first_narration):
+                if not visual_first and not first_source_audio and is_summary_lead(first_narration):
                     target.append("첫 장면을 뉴스 요약·소식 소개로 시작하지 말고 시민의 의문을 바로 물으세요.")
-                if not has_citizen_stake(f"{viewer_stake} {hook_text} {first_narration}"):
+                if not has_citizen_stake(
+                    f"{viewer_stake} {hook_text} "
+                    f"{first_frame_copy if visual_first or first_source_audio else first_narration}"
+                ):
                     target.append(
                         "viewer_stake와 첫 훅에는 시민·소비자의 생활, 비용, 안전, 권리 중 하나가 구체적으로 보여야 합니다."
                     )
@@ -4005,7 +5695,11 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
                     target.append("선택한 hook이 issue_focus의 핵심 모순을 직접 드러내지 않습니다.")
                 if not has_shared_significant_term(issue_focus, first_frame_copy):
                     target.append("첫 화면이 issue_focus와 연결되지 않습니다. 절차가 아닌 핵심 모순을 보여주세요.")
-                if not has_shared_significant_term(issue_focus, first_narration):
+                if (
+                    not visual_first
+                    and not first_source_audio
+                    and not has_shared_significant_term(issue_focus, first_narration)
+                ):
                     target.append("첫 대사가 issue_focus와 연결되지 않습니다. 첫 문장부터 이상한 지점을 말하세요.")
             if viewer_stake and not has_shared_significant_term(
                 viewer_stake, f"{hook_text} {first_frame_copy} {first_narration}"
@@ -4130,6 +5824,8 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
     synthetic_used = False
     storyboard_has_visuals = False
     used_real_news_photo = False
+    real_media_scene_count = 0
+    visual_scene_count = 0
     validated_asset_paths: set[str] = set()
     used_asset_kinds: set[str] = set()
     image_motions: list[str] = []
@@ -4163,6 +5859,29 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
         caption = str(scene.get("caption") or scene.get("ticker") or "").strip()
         if style_template in RETENTION_TEMPLATES and len(caption) > 42:
             warnings.append(f"한 화면 자막이 깁니다: {scene_id}: {len(caption)}자")
+        scene_editorial_text = " ".join(
+            str(scene.get(field) or "").strip()
+            for field in (
+                "eyebrow",
+                "headline",
+                "caption",
+                "payoff_title",
+                "payoff_detail",
+                "payoff_punch",
+                "discussion_prompt",
+                "narration",
+            )
+        )
+        if UNSTABLE_RELATIVE_TIME_PATTERN.search(scene_editorial_text):
+            warnings.append(
+                f"게시일에 따라 틀리는 상대 시행 시점 문구가 있습니다: {scene_id}. "
+                "실제 게시 일정이 확정되지 않았다면 '시행 중', '이제 시행' 또는 검증된 절대 시점을 사용하세요."
+            )
+        if IMMEDIATE_TOW_PATTERN.search(scene_editorial_text):
+            warnings.append(
+                f"신고 직후 자동 견인으로 오해할 수 있는 문구가 있습니다: {scene_id}. "
+                "출처가 즉시 견인을 명시하지 않았다면 이동 권고·불응·지자체 요청 조건을 유지하세요."
+            )
         if screen_copy_mode == SCREEN_COPY_MODE_NOUN_PHRASES:
             for field in (
                 "eyebrow",
@@ -4259,6 +5978,17 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
             )
         image = str(scene.get("image") or "").strip()
         video = str(scene.get("video") or "").strip()
+        audio_mode = scene_audio_mode(scene)
+        if audio_mode not in ALLOWED_SCENE_AUDIO_MODES:
+            errors.append(
+                f"audio_mode은 narration 또는 source-video여야 합니다: {scene_id}: {audio_mode or 'empty'}"
+            )
+        if audio_mode == SOURCE_VIDEO_AUDIO_MODE and not video:
+            errors.append(f"source-video audio_mode에는 video 자산이 필요합니다: {scene_id}")
+        if "external_caption" in scene and not isinstance(scene.get("external_caption"), bool):
+            errors.append(f"external_caption은 불리언이어야 합니다: {scene_id}")
+        if "render_text_overlay" in scene and not isinstance(scene.get("render_text_overlay"), bool):
+            errors.append(f"render_text_overlay는 불리언이어야 합니다: {scene_id}")
         if image and video:
             errors.append(f"image와 video를 동시에 지정할 수 없습니다: {scene_id}")
         if image:
@@ -4365,6 +6095,7 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
         visual_sequence.append(visual)
         if visual:
             storyboard_has_visuals = True
+            visual_scene_count += 1
             visual_path: Path | None = None
             try:
                 visual_path = resolve_project_file(project_dir, visual)
@@ -4372,6 +6103,8 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
                     video_info = probe_video(visual_path)
                     if not video_info["has_video"]:
                         errors.append(f"영상 스트림이 없는 video 자산: {video}")
+                    elif audio_mode == SOURCE_VIDEO_AUDIO_MODE and not video_info["has_audio"]:
+                        errors.append(f"source-video audio_mode인데 오디오 스트림이 없습니다: {scene_id}: {video}")
                     elif video_start >= video_info["duration"]:
                         errors.append(f"video_start가 클립 길이 이상입니다: {scene_id}: {video_start:.1f}/{video_info['duration']:.1f}초")
             except News2ShortsError as exc:
@@ -4382,6 +6115,7 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
             else:
                 target = errors if final else warnings
                 kind = str(record.get("kind") or "").strip()
+                media_type = str(record.get("media_type") or "").strip()
                 raw_company_names = record.get("company_names") or []
                 company_names: list[str] = []
                 if not isinstance(raw_company_names, list):
@@ -4435,6 +6169,31 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
                         target.append(f"권리 승인이 완료되지 않은 시각 자산: {visual}")
                     if kind not in ALLOWED_ASSET_KINDS:
                         target.append(f"지원하지 않는 자산 kind: {visual}: {kind or 'empty'}")
+                    if kind == "unreviewed":
+                        if record.get("approved") is not False:
+                            errors.append(f"unreviewed 자산은 approved=false여야 합니다: {visual}")
+                        if record.get("local_review_only") is not True:
+                            errors.append(f"unreviewed 자산은 local_review_only=true여야 합니다: {visual}")
+                        if not is_http_url(str(record.get("source_url") or "")):
+                            errors.append(f"unreviewed 자산에도 canonical source_url이 필요합니다: {visual}")
+                        permission_status = str(record.get("permission_status") or "unknown").strip()
+                        if permission_status not in {"unknown", "review_required"}:
+                            errors.append(
+                                f"unreviewed 자산 permission_status는 unknown 또는 review_required여야 합니다: {visual}"
+                            )
+                        if record.get("whiteboard_text_free_reviewed") not in {True, False}:
+                            errors.append(
+                                f"unreviewed 자산에는 whiteboard_text_free_reviewed 불리언이 필요합니다: {visual}"
+                            )
+                    if strict_real_media_majority and media_type not in ALLOWED_MEDIA_TYPES:
+                        target.append(
+                            "새 프로젝트 시각 자산에는 media_type이 필요합니다: "
+                            f"{visual}: {media_type or 'empty'}"
+                        )
+                    if strict_real_media_majority and video and media_type != "video":
+                        target.append(f"video 장면의 media_type은 video여야 합니다: {visual}")
+                    if strict_real_media_majority and image and media_type == "video":
+                        target.append(f"image 장면의 media_type은 video일 수 없습니다: {visual}")
                     if visual_role == "reaction-meme":
                         usage_role = str(record.get("usage_role") or "").strip()
                         meme_origin = str(record.get("meme_origin") or "").strip()
@@ -4448,6 +6207,39 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
                             target.append(f"밈 자산은 licensed, owned, generated만 허용합니다: {visual}")
                     if not str(record.get("retrieved_at") or "").strip():
                         target.append(f"retrieved_at이 없는 시각 자산: {visual}")
+                    if korean_visuals_required:
+                        if str(record.get("visual_locale") or "").strip() != DEFAULT_VISUAL_LOCALE:
+                            errors.append(f"한국 이미지 전용 장면의 visual_locale은 ko-KR이어야 합니다: {visual}")
+                        if record.get("korean_context_reviewed") is not True:
+                            errors.append(f"한국 배경 육안 검수가 완료되지 않은 시각 자산: {visual}")
+                        if len(str(record.get("korean_context_note") or "").strip()) < 12:
+                            errors.append(
+                                "한국어 표지판·국내 도로·건축·차량 환경 등 한국 배경 근거가 필요합니다: "
+                                f"{visual}"
+                            )
+                    elif international_visuals_enabled:
+                        assert isinstance(international_visuals, dict)
+                        asset_locale = str(record.get("visual_locale") or "").strip()
+                        source_locale = str(international_visuals.get("source_locale") or "").strip()
+                        source_country = str(international_visuals.get("source_country") or "").strip().upper()
+                        if asset_locale == DEFAULT_VISUAL_LOCALE:
+                            if record.get("korean_context_reviewed") is not True:
+                                errors.append(f"한국 대응 자료의 한국 배경 검수가 필요합니다: {visual}")
+                            if len(str(record.get("korean_context_note") or "").strip()) < 12:
+                                errors.append(f"한국 대응 자료의 배경 근거가 필요합니다: {visual}")
+                        else:
+                            if asset_locale not in {source_locale, "neutral"}:
+                                errors.append(
+                                    f"국제 실제사건 장면의 visual_locale은 {source_locale} 또는 neutral이어야 합니다: {visual}"
+                                )
+                            if str(record.get("source_country") or "").strip().upper() != source_country:
+                                errors.append(f"국제 실제사건 장면의 source_country가 다릅니다: {visual}")
+                            if record.get("source_event_context_reviewed") is not True:
+                                errors.append(f"국제 실제사건 맥락 검수가 필요합니다: {visual}")
+                            if len(str(record.get("source_event_context_note") or "").strip()) < 12:
+                                errors.append(f"국제 실제사건 맥락 근거가 필요합니다: {visual}")
+                            if record.get("actual_event_media") is not True and media_type in {"photo", "video"}:
+                                errors.append(f"국제 실사 자료는 actual_event_media=true여야 합니다: {visual}")
                     if kind in {"licensed", "official"}:
                         source_url = str(record.get("source_url") or "").strip()
                         if not is_http_url(source_url):
@@ -4462,8 +6254,23 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
                             target.append(f"attribution이 없는 수집 자산: {visual}")
                         if visual_sourcing.get("web_search_enabled") and record.get("source_method") != "web_search":
                             target.append(f"source_method가 web_search가 아닌 수집 자산: {visual}")
-                    if (
-                        image
+                    qualifies_as_real_media = (
+                        kind in {"licensed", "official", "owned"}
+                        and record.get("synthetic") is False
+                        and record.get("approved") is True
+                        and record.get("news_relevance_reviewed") is True
+                        and (
+                            (bool(image) and media_type == "photo")
+                            or (bool(video) and media_type == "video")
+                        )
+                    )
+                    if strict_real_media_majority and qualifies_as_real_media:
+                        real_media_scene_count += 1
+                        if image and media_type == "photo":
+                            used_real_news_photo = True
+                    elif (
+                        not strict_real_media_majority
+                        and image
                         and kind in {"licensed", "official", "owned"}
                         and record.get("synthetic") is False
                         and record.get("approved") is True
@@ -4598,11 +6405,27 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
                 f"생성 시각자료가 {synthetic_run_limit}장면 이상 연속됩니다. "
                 "실제 사진·공식 자료·도표로 시각 리듬을 바꾸세요."
             )
+    if strict_real_media_majority and visual_scene_count:
+        real_media_share = real_media_scene_count / visual_scene_count
+        if real_media_share < min_real_media_ratio:
+            target = errors if final else warnings
+            target.append(
+                "실사 시각자료 비중이 낮습니다: "
+                f"{real_media_scene_count}/{visual_scene_count} "
+                f"(기준 {min_real_media_ratio:.0%}). "
+                "권리와 기사 연관성을 확인한 실제 사진·영상 위주로 장면을 다시 구성하세요."
+            )
     if visual_sourcing.get("real_news_photo_required") is True and not used_real_news_photo:
         target = errors if final else warnings
+        requirement = (
+            "licensed·official·owned 사진 중 media_type=photo, approved, synthetic=false, "
+            "news_relevance_reviewed=true인 자산"
+            if strict_real_media_majority
+            else "licensed·official·owned 사진 중 approved, synthetic=false, news_relevance_reviewed=true인 자산"
+        )
         target.append(
             "권리와 기사 연관성을 확인한 실제 뉴스 사진이 없습니다. "
-            "licensed·official·owned 사진 중 approved, synthetic=false, news_relevance_reviewed=true인 자산을 최소 1개 사용하세요."
+            f"{requirement}을 최소 1개 사용하세요."
         )
     if (
         len(image_motions) >= 4
@@ -4678,6 +6501,47 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
                 warnings.append("payoff_title이 깁니다. 한두 줄의 완결된 답으로 줄이세요.")
             if len(payoff_detail) > 52:
                 warnings.append("payoff_detail이 깁니다. 확인할 조건이나 의미만 남기세요.")
+            payoff_scene_index = valid_scenes.index(last_non_loop)
+            earlier_visible_copy: list[tuple[str, str, str]] = []
+            for earlier_scene in valid_scenes[:payoff_scene_index]:
+                earlier_scene_id = str(earlier_scene.get("id") or "earlier-scene")
+                for earlier_field in (
+                    "caption",
+                    "evidence_label",
+                    "evidence_value",
+                    "payoff_title",
+                    "payoff_detail",
+                    "payoff_punch",
+                ):
+                    earlier_value = str(earlier_scene.get(earlier_field) or "").strip()
+                    if earlier_value:
+                        earlier_visible_copy.append(
+                            (earlier_scene_id, earlier_field, earlier_value)
+                        )
+            for payoff_field, payoff_value in (
+                ("payoff_title", payoff_title),
+                ("payoff_detail", payoff_detail),
+                ("payoff_punch", payoff_punch),
+            ):
+                normalized_payoff_value = re.sub(
+                    r"[^0-9A-Za-z가-힣]", "", payoff_value.lower()
+                )
+                if len(normalized_payoff_value) < 4:
+                    continue
+                for earlier_scene_id, earlier_field, earlier_value in earlier_visible_copy:
+                    normalized_earlier_value = re.sub(
+                        r"[^0-9A-Za-z가-힣]", "", earlier_value.lower()
+                    )
+                    if (
+                        normalized_payoff_value == normalized_earlier_value
+                        or text_similarity(payoff_value, earlier_value) >= 0.9
+                    ):
+                        target.append(
+                            "결론 카드가 앞서 공개한 자막을 반복합니다: "
+                            f"{payoff_field} ↔ {earlier_scene_id}.{earlier_field}. "
+                            "결론에는 새 행동, 조건 또는 의미를 남기세요."
+                        )
+                        break
             if strict_payoff_retention:
                 payoff_delivery = str(last_non_loop.get("voice_delivery") or "auto").strip().lower()
                 if not payoff_punch:
@@ -4718,9 +6582,9 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
             target.append("payoff가 너무 짧습니다. 현재 상태와 시청자가 알아야 할 결과를 한 문장에 함께 적으세요.")
         if normalized_payoff in WEAK_PAYOFF_TEXTS or normalized_caption in WEAK_PAYOFF_TEXTS:
             target.append("payoff가 추상적인 문구로 끝납니다. 검증된 상태, 원인, 영향 또는 다음 조건을 구체적으로 밝히세요.")
-        if not payoff_narration:
+        if not payoff_narration and not visual_first:
             target.append("payoff 장면에는 결론을 완결된 문장으로 말하는 narration이 필요합니다.")
-        if strict_payoff_retention and payoff_narration:
+        if strict_payoff_retention and payoff_narration and not visual_first:
             payoff_punch = str(last_non_loop.get("payoff_punch") or "").strip()
             if len(re.findall(r"[.!?…]+", payoff_narration)) < 2:
                 target.append(
@@ -4735,6 +6599,7 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
             screen_copy_mode == SCREEN_COPY_MODE_NOUN_PHRASES
             and discussion_prompt
             and payoff_narration
+            and not visual_first
         ):
             if not payoff_narration.endswith("?"):
                 target.append(
@@ -4759,10 +6624,15 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
         (errors if final and strict_early_retention else warnings).append(
             f"첫 장면이 {first_limit:.1f}초를 넘습니다. 첫 질문을 줄이고 10초 이내 재후킹 공간을 확보하세요."
         )
-    if planned_total and not 15 <= planned_total <= 180:
+    general_minimum = 8.0 if visual_first else 12.0 if strict_v16_retention else 15.0
+    if planned_total and not general_minimum <= planned_total <= 180:
         warnings.append(f"계획 영상 길이가 일반 Shorts 범위를 벗어납니다: {planned_total:.1f}초")
     format_ranges = {
-        "quick-reveal": (12.0, 35.0, 4, 9),
+        "quick-reveal": (
+            (VISUAL_FIRST_MIN_DURATION_SECONDS, VISUAL_FIRST_MAX_DURATION_SECONDS, VISUAL_FIRST_MIN_SCENES, VISUAL_FIRST_MAX_SCENES)
+            if visual_first
+            else (CONTINUOUS_FLOW_MIN_DURATION_SECONDS, CONTINUOUS_FLOW_MAX_DURATION_SECONDS, 4, 9)
+        ),
         "fact-stack": (20.0, 55.0, 6, 12),
         "story-explainer": (35.0, 120.0, 8, 20),
     }
@@ -4826,6 +6696,19 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
                     "publish.json의 source_lines에는 URL을 넣을 수 없습니다. "
                     "매체명 — 기사명 형식으로 작성하세요."
                 )
+        if publish_version >= 5:
+            if PUBLISH_HASHTAG_PATTERN.search(description_value):
+                target.append(
+                    "publish.json의 업로드 설명에는 해시태그를 넣지 마세요. "
+                    "해시태그는 제목과 tags 필드에서만 관리하세요."
+                )
+            repeated_sentences = duplicated_title_sentences(title_value, description_value)
+            if repeated_sentences:
+                target.append(
+                    "publish.json의 업로드 설명이 제목을 반복합니다. "
+                    "제목은 질문형 훅으로 두고 설명은 답·근거·확인사항부터 작성하세요: "
+                    f"{repeated_sentences[0]}"
+                )
         tags = publish.get("tags")
         if not isinstance(tags, list) or not any(str(tag).strip() for tag in tags):
             target.append("publish.json에 업로드용 tags가 없습니다.")
@@ -4855,10 +6738,19 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
                 thumbnail_method = upload_settings.get("thumbnail_method")
                 if thumbnail_method not in {"video_frame", "file_upload"}:
                     target.append("upload_settings.thumbnail_method는 video_frame 또는 file_upload여야 합니다.")
-                if thumbnail_method == "file_upload" and not str(
-                    upload_settings.get("thumbnail_file") or ""
-                ).strip():
-                    target.append("file_upload 썸네일에는 upload_settings.thumbnail_file이 필요합니다.")
+                thumbnail_status = str(upload_settings.get("thumbnail_status") or "").strip()
+                thumbnail_file_value = str(upload_settings.get("thumbnail_file") or "").strip()
+                if thumbnail_status and thumbnail_status not in {"pending", "ready", "blocked_rights"}:
+                    target.append(
+                        "upload_settings.thumbnail_status는 pending, ready, blocked_rights 중 하나여야 합니다."
+                    )
+                if thumbnail_method == "file_upload" and not thumbnail_file_value:
+                    if thumbnail_status == "blocked_rights":
+                        (errors if final else warnings).append(
+                            "file_upload 썸네일이 권리 승인 이미지 부족으로 차단됐습니다."
+                        )
+                    else:
+                        target.append("file_upload 썸네일에는 upload_settings.thumbnail_file이 필요합니다.")
                 if not str(upload_settings.get("thumbnail_note") or "").strip():
                     target.append("upload_settings.thumbnail_note에 선택 장면·시점 또는 썸네일 파일 안내가 필요합니다.")
                 if project_version >= 9:
@@ -4939,6 +6831,14 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
                     except ValueError:
                         target.append("upload_settings.schedule_at은 ISO 8601 날짜·시간이어야 합니다.")
 
+    source_audio_errors, source_audio_warnings = validate_source_audio_review(
+        project_dir,
+        [scene for scene in scenes if isinstance(scene, dict)],
+        final=final,
+    )
+    errors.extend(source_audio_errors)
+    warnings.extend(source_audio_warnings)
+
     if final:
         approvals = project.get("approvals") or {}
         required_approvals = [
@@ -4985,6 +6885,66 @@ def compose_brand_intro(project: dict, body: Path, destination: Path) -> dict:
     config = brand_intro_config(project)
     if config.get("enabled") is not True:
         raise News2ShortsError("공통 인트로는 비활성화할 수 없습니다.")
+    mode = str(config.get("mode") or BRAND_MODE_LEGACY_FULL).strip()
+    if mode not in ALLOWED_BRAND_MODES:
+        raise News2ShortsError("brand_intro.mode는 corner-logo 또는 legacy-full이어야 합니다.")
+    if mode == BRAND_MODE_CORNER_LOGO:
+        if not BRAND_LOGO_PATH.is_file():
+            raise News2ShortsError(f"corner-logo 자산이 없습니다: {BRAND_LOGO_PATH}")
+        body_info = probe_video(body)
+        if not body_info["has_video"] or not body_info["has_audio"]:
+            raise News2ShortsError("뉴스 본편에는 영상과 오디오 스트림이 모두 필요합니다.")
+        run_command(
+            [
+                "ffmpeg",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-i",
+                str(body),
+                "-i",
+                str(BRAND_LOGO_PATH),
+                "-filter_complex",
+                f"[1:v]scale={BRAND_LOGO_SIZE}:{BRAND_LOGO_SIZE}[logo];"
+                f"[0:v][logo]overlay={BRAND_LOGO_MARGIN}:{BRAND_LOGO_MARGIN}:format=auto,format=yuv420p[v]",
+                "-map",
+                "[v]",
+                "-map",
+                "0:a:0",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "medium",
+                "-crf",
+                "18",
+                "-r",
+                "30",
+                "-c:a",
+                "copy",
+                "-movflags",
+                "+faststart",
+                "-y",
+                str(destination),
+            ]
+        )
+        output_info = probe_video(destination)
+        return {
+            "enabled": True,
+            "mode": BRAND_MODE_CORNER_LOGO,
+            "asset": BRAND_INTRO_ASSET_ID,
+            "asset_path": "assets/news-hanmyeon-channel-logo.png",
+            "source_duration": 0.0,
+            "lead_in_seconds": 0.0,
+            "has_audio": False,
+            "position": "top-left",
+            "size": BRAND_LOGO_SIZE,
+            "margin": BRAND_LOGO_MARGIN,
+            "transition": None,
+            "transition_duration": 0.0,
+            "transition_scope": "none",
+            "news_scene_transition": "cut",
+            "rendered_total_duration": round(float(output_info["duration"]), 3),
+        }
     asset_id = str(config.get("asset") or "").strip()
     asset_path = brand_intro_asset_path(asset_id)
     if asset_path is None:
@@ -5074,9 +7034,11 @@ def compose_brand_intro(project: dict, body: Path, destination: Path) -> dict:
     output_info = probe_video(destination)
     return {
         "enabled": True,
+        "mode": BRAND_MODE_LEGACY_FULL,
         "asset": asset_id,
         "asset_path": asset_path.relative_to(PLUGIN_ROOT).as_posix(),
         "source_duration": round(float(intro_info["duration"]), 3),
+        "lead_in_seconds": round(float(transition_offset), 3),
         "has_audio": True,
         "transition": transition,
         "transition_duration": round(transition_duration, 3),
@@ -5349,6 +7311,37 @@ def concatenate_mp4_files(paths: list[Path], destination: Path, list_path: Path)
     )
 
 
+def concatenate_audio_files(paths: list[Path], destination: Path, list_path: Path) -> None:
+    if not paths:
+        raise News2ShortsError("연결할 오디오가 없습니다.")
+    list_path.write_text(
+        "".join(f"file '{path.as_posix()}'\n" for path in paths),
+        encoding="utf-8",
+    )
+    run_command(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            str(list_path),
+            "-ac",
+            "2",
+            "-ar",
+            "48000",
+            "-c:a",
+            "pcm_s16le",
+            "-y",
+            str(destination),
+        ]
+    )
+
+
 def normalize_editor_audio(source: Path, destination: Path) -> None:
     run_command(
         [
@@ -5397,9 +7390,13 @@ def create_editor_package(
     output_name: str,
     work_dir: Path,
     editor_scenes: list[dict],
+    mid_cta_path: Path | None,
+    mid_cta_audio: Path | None,
+    mid_cta_report: dict,
     cta_path: Path | None,
     cta_audio: Path | None,
     cta_report: dict,
+    background_music: Path | None,
     *,
     overwrite: bool,
 ) -> dict:
@@ -5413,11 +7410,18 @@ def create_editor_package(
         directory.mkdir(parents=True, exist_ok=True)
 
     shutil.copy2(rendered_output, package_root / "reference.mp4")
-    intro_asset_id = str(brand_intro_config(project).get("asset") or "").strip()
-    intro_asset_path = brand_intro_asset_path(intro_asset_id)
-    if intro_asset_path is None or not intro_asset_path.is_file():
-        raise News2ShortsError(f"편집 패키지용 공통 인트로 자산을 찾을 수 없습니다: {intro_asset_id}")
-    shutil.copy2(intro_asset_path, package_root / "brand-intro.mp4")
+    brand_config = brand_intro_config(project)
+    brand_mode = str(brand_config.get("mode") or BRAND_MODE_LEGACY_FULL).strip()
+    intro_asset_id = str(brand_config.get("asset") or "").strip()
+    if brand_mode == BRAND_MODE_CORNER_LOGO:
+        if not BRAND_LOGO_PATH.is_file():
+            raise News2ShortsError(f"편집 패키지용 corner-logo 자산이 없습니다: {BRAND_LOGO_PATH}")
+        shutil.copy2(BRAND_LOGO_PATH, package_root / "brand-logo.png")
+    else:
+        intro_asset_path = brand_intro_asset_path(intro_asset_id)
+        if intro_asset_path is None or not intro_asset_path.is_file():
+            raise News2ShortsError(f"편집 패키지용 공통 인트로 자산을 찾을 수 없습니다: {intro_asset_id}")
+        shutil.copy2(intro_asset_path, package_root / "brand-intro.mp4")
 
     packaged_scenes: list[dict] = []
     clean_scene_paths: list[Path] = []
@@ -5444,6 +7448,9 @@ def create_editor_package(
                 "beat": str(scene.get("beat") or ""),
                 "duration": round(float(item["duration"]), 3),
                 "audio_duration": round(float(item["audio_duration"]), 3),
+                "audio_mode": scene_audio_mode(scene),
+                "external_caption": scene_external_caption_enabled(scene),
+                "render_text_overlay": scene_text_overlay_enabled(scene),
                 "narration": suppress_editorial_identifiers(str(scene.get("narration") or "")),
                 "headline": suppress_editorial_identifiers(str(scene.get("headline") or "")),
                 "caption": suppress_editorial_identifiers(str(scene.get("caption") or "")),
@@ -5458,6 +7465,18 @@ def create_editor_package(
                 "text_layers_editable": False,
             }
         )
+
+    packaged_mid_cta: Path | None = None
+    packaged_mid_cta_audio: Path | None = None
+    mid_insert_after_index = 0
+    if mid_cta_report.get("enabled") is True and mid_cta_path and mid_cta_path.is_file():
+        mid_insert_after_index = int(mid_cta_report.get("insert_after_scene_index") or 0)
+        packaged_mid_cta = scenes_dir / "mid-cta.mp4"
+        shutil.copy2(mid_cta_path, packaged_mid_cta)
+        clean_scene_paths.insert(mid_insert_after_index, packaged_mid_cta)
+        if mid_cta_audio and mid_cta_audio.is_file():
+            packaged_mid_cta_audio = audio_dir / "mid-cta.wav"
+            normalize_editor_audio(mid_cta_audio, packaged_mid_cta_audio)
 
     packaged_cta: Path | None = None
     packaged_cta_audio: Path | None = None
@@ -5475,30 +7494,35 @@ def create_editor_package(
         clean_body,
         work_dir / "editor-concat.txt",
     )
+    packaged_background_music: Path | None = None
+    if background_music and background_music.is_file():
+        packaged_background_music = audio_dir / "background-music.wav"
+        normalize_editor_audio(background_music, packaged_background_music)
+        clean_body_with_music = work_dir / "editor-news-body-with-music.mp4"
+        mux_continuous_audio(clean_body, background_music, clean_body_with_music)
+        clean_body = clean_body_with_music
     editable_video = package_root / "editable.mp4"
     editable_intro_report = compose_brand_intro(project, clean_body, editable_video)
-    body_offset = max(
-        0.0,
-        float(editable_intro_report.get("source_duration") or 0.0)
-        - float(editable_intro_report.get("transition_duration") or 0.0),
-    )
+    body_offset = max(0.0, float(editable_intro_report.get("lead_in_seconds") or 0.0))
 
-    timeline_rows: list[dict] = [
-        {
-            "index": 0,
-            "scene_id": "brand-intro",
-            "kind": "intro",
-            "start": 0.0,
-            "end": round(float(editable_intro_report.get("source_duration") or 0.0), 3),
-            "duration": round(float(editable_intro_report.get("source_duration") or 0.0), 3),
-            "headline": "",
-            "caption": "",
-            "narration": "",
-            "scene_clip": "brand-intro.mp4",
-            "overlay_file": "",
-            "audio_file": "embedded",
-        }
-    ]
+    timeline_rows: list[dict] = []
+    if brand_mode == BRAND_MODE_LEGACY_FULL:
+        timeline_rows.append(
+            {
+                "index": 0,
+                "scene_id": "brand-intro",
+                "kind": "intro",
+                "start": 0.0,
+                "end": round(float(editable_intro_report.get("source_duration") or 0.0), 3),
+                "duration": round(float(editable_intro_report.get("source_duration") or 0.0), 3),
+                "headline": "",
+                "caption": "",
+                "narration": "",
+                "scene_clip": "brand-intro.mp4",
+                "overlay_file": "",
+                "audio_file": "embedded",
+            }
+        )
     srt_blocks: list[str] = []
     cursor = body_offset
     cue_index = 1
@@ -5523,13 +7547,44 @@ def create_editor_package(
                 "audio_file": scene_info["audio_file"],
             }
         )
-        if scene_info["narration"]:
+        if scene_info["narration"] and scene_info["external_caption"]:
             srt_blocks.append(
                 f"{cue_index}\n{srt_timestamp(start)} --> {srt_timestamp(end)}\n"
                 f"{scene_info['narration']}\n"
             )
             cue_index += 1
         cursor = end
+        if packaged_mid_cta and index == mid_insert_after_index:
+            mid_duration = float(mid_cta_report.get("duration") or 0.0)
+            mid_end = cursor + mid_duration
+            timeline_rows.append(
+                {
+                    "index": index + 0.5,
+                    "scene_id": "mid-cta",
+                    "kind": "mid-cta",
+                    "start": round(cursor, 3),
+                    "end": round(mid_end, 3),
+                    "duration": round(mid_duration, 3),
+                    "headline": str(mid_cta_report.get("headline") or ""),
+                    "caption": " · ".join(
+                        value
+                        for value in (
+                            str(mid_cta_report.get("emphasis") or "").strip(),
+                            str(mid_cta_report.get("subline") or "").strip(),
+                        )
+                        if value
+                    ),
+                    "narration": str(mid_cta_report.get("narration") or ""),
+                    "scene_clip": packaged_mid_cta.relative_to(package_root).as_posix(),
+                    "overlay_file": "",
+                    "audio_file": (
+                        packaged_mid_cta_audio.relative_to(package_root).as_posix()
+                        if packaged_mid_cta_audio
+                        else "embedded"
+                    ),
+                }
+            )
+            cursor = mid_end
 
     if packaged_cta:
         cta_duration = float(cta_report.get("duration") or 0.0)
@@ -5584,7 +7639,12 @@ def create_editor_package(
         writer.writeheader()
         writer.writerows(timeline_rows)
 
-    for metadata_name in ("storyboard.json", "rights-manifest.json", "sources.json"):
+    for metadata_name in (
+        "storyboard.json",
+        "rights-manifest.json",
+        "sources.json",
+        SOURCE_AUDIO_REVIEW_FILENAME,
+    ):
         source = project_dir / metadata_name
         if source.is_file():
             shutil.copy2(source, metadata_dir / metadata_name)
@@ -5617,8 +7677,20 @@ reference.mp4는 플러그인의 완성 화면 비교용입니다.
         "editable_video": "editable.mp4",
         "captions": "captions.srt",
         "timeline": "timeline.csv",
-        "intro": "brand-intro.mp4",
+        "intro": "brand-intro.mp4" if brand_mode == BRAND_MODE_LEGACY_FULL else None,
+        "brand_logo": "brand-logo.png" if brand_mode == BRAND_MODE_CORNER_LOGO else None,
+        "brand_mode": brand_mode,
         "intro_body_offset": round(body_offset, 3),
+        "background_music": (
+            packaged_background_music.relative_to(package_root).as_posix()
+            if packaged_background_music
+            else None
+        ),
+        "mid_cta": (
+            packaged_mid_cta.relative_to(package_root).as_posix()
+            if packaged_mid_cta
+            else None
+        ),
         "cta": packaged_cta.relative_to(package_root).as_posix() if packaged_cta else None,
         "scene_count": len(packaged_scenes),
         "scenes": packaged_scenes,
@@ -5649,6 +7721,9 @@ reference.mp4는 플러그인의 완성 화면 비교용입니다.
         "editable_video": f"{relative_target}/editable.mp4",
         "captions": f"{relative_target}/captions.srt",
         "timeline": f"{relative_target}/timeline.csv",
+        "mid_cta": (
+            f"{relative_target}/scenes/mid-cta.mp4" if packaged_mid_cta else None
+        ),
         "scene_count": len(packaged_scenes),
         "compatibility": manifest["compatibility"],
         "round_trip_supported": False,
@@ -5665,6 +7740,162 @@ def payoff_discussion_prompt(storyboard: dict) -> str:
             continue
         return str(scene.get("discussion_prompt") or "").strip()
     return ""
+
+
+def mid_cta_config(project: dict) -> dict:
+    configured = project.get("mid_cta")
+    result = {
+        "mode": "disabled",
+        "placement": MID_CTA_PLACEMENT,
+        "min_duration": MID_CTA_MIN_DURATION,
+        "max_duration": MID_CTA_MAX_DURATION,
+        "style": MID_CTA_STYLE,
+        "voice_enabled": True,
+        "voice_delivery": "verdict",
+        "sfx_enabled": True,
+        "ui_target_profile": MID_CTA_UI_TARGET_PROFILE,
+        "arrow_target": {
+            "x": MID_CTA_DEFAULT_TARGET_X,
+            "y": MID_CTA_DEFAULT_TARGET_Y,
+        },
+        "ordinary_copy": {
+            "headline": "보고 계신데...",
+            "emphasis": "구독은 아직이네요",
+            "subline": "채널명 옆 구독, 한 번만",
+            "narration": "구독은 아직이네요.",
+        },
+        "sensitive_copy": {
+            "headline": "잠깐만요",
+            "emphasis": "구독은 아직",
+            "subline": "채널명 옆 구독, 한 번만",
+            "narration": "구독 한 번만 부탁드려요.",
+        },
+    }
+    if not isinstance(configured, dict):
+        return result
+    for key in (
+        "mode",
+        "placement",
+        "min_duration",
+        "max_duration",
+        "style",
+        "voice_enabled",
+        "voice_delivery",
+        "sfx_enabled",
+        "ui_target_profile",
+    ):
+        if key in configured:
+            result[key] = configured[key]
+    for key in ("arrow_target", "ordinary_copy", "sensitive_copy"):
+        value = configured.get(key)
+        if isinstance(value, dict):
+            merged = dict(result[key])
+            merged.update(value)
+            result[key] = merged
+    return result
+
+
+def select_mid_cta(
+    project: dict,
+    scenes: list[dict],
+    scene_reports: list[dict],
+) -> dict:
+    try:
+        project_version = int(project.get("version") or 1)
+    except (TypeError, ValueError):
+        project_version = 1
+    config = mid_cta_config(project)
+    mode = str(config.get("mode") or "disabled").strip().lower()
+    base = {
+        "enabled": False,
+        "mode": mode,
+        "placement": str(config.get("placement") or MID_CTA_PLACEMENT),
+    }
+    if project_version < 17:
+        return {**base, "reason": "version 16 이하 프로젝트는 중간 CTA를 자동 적용하지 않습니다."}
+    if mode == "disabled":
+        return {**base, "reason": "사용자가 중간 CTA를 제외했습니다."}
+    if str(project.get("delivery_mode") or "").strip() != CONTINUOUS_FLOW_MODE:
+        return {**base, "reason": "visual-first에는 중간 음성 CTA를 넣지 않습니다."}
+    if not scene_reports:
+        return {**base, "reason": "렌더된 뉴스 장면이 없습니다."}
+    body_duration = max(
+        0.0,
+        float(scene_reports[-1].get("timeline_end") or 0.0),
+    )
+    if body_duration < MID_CTA_MIN_BODY_SECONDS:
+        return {
+            **base,
+            "reason": f"뉴스 본문이 {MID_CTA_MIN_BODY_SECONDS:.0f}초 미만입니다.",
+            "body_duration": round(body_duration, 3),
+        }
+    candidates: list[tuple[float, int, dict, dict]] = []
+    for index, (scene, report) in enumerate(zip(scenes, scene_reports), start=1):
+        beat = str(scene.get("beat") or "").strip()
+        boundary = float(report.get("timeline_end") or 0.0)
+        ratio = boundary / body_duration if body_duration else 0.0
+        if (
+            beat in MID_CTA_ALLOWED_BEATS
+            and MID_CTA_TARGET_MIN_RATIO <= ratio <= MID_CTA_TARGET_MAX_RATIO
+        ):
+            candidates.append((abs(ratio - MID_CTA_TARGET_RATIO), index, scene, report))
+    if not candidates:
+        return {
+            **base,
+            "reason": "본문 40~60% 구간에 rehook 또는 turn 경계가 없습니다.",
+            "body_duration": round(body_duration, 3),
+        }
+    _, scene_index, scene, report = min(candidates, key=lambda item: (item[0], item[1]))
+    copy_key = "sensitive_copy" if project.get("sensitive_topic") is True else "ordinary_copy"
+    copy = config.get(copy_key)
+    assert isinstance(copy, dict)
+    target = config.get("arrow_target")
+    assert isinstance(target, dict)
+    return {
+        "enabled": True,
+        "mode": mode,
+        "placement": MID_CTA_PLACEMENT,
+        "reason": "본문 중앙에 가장 가까운 rehook 또는 turn 장면 뒤에 배치했습니다.",
+        "insert_after_scene_id": str(scene.get("id") or f"scene-{scene_index:02d}"),
+        "insert_after_scene_index": scene_index,
+        "body_duration": round(body_duration, 3),
+        "boundary_ratio": round(float(report.get("timeline_end") or 0.0) / body_duration, 4),
+        "headline": str(copy.get("headline") or "").strip(),
+        "emphasis": str(copy.get("emphasis") or "").strip(),
+        "subline": str(copy.get("subline") or "").strip(),
+        "narration": str(copy.get("narration") or "").strip(),
+        "min_duration": float(config.get("min_duration") or MID_CTA_MIN_DURATION),
+        "max_duration": float(config.get("max_duration") or MID_CTA_MAX_DURATION),
+        "style": str(config.get("style") or MID_CTA_STYLE),
+        "voice_enabled": config.get("voice_enabled") is not False,
+        "voice_delivery": str(config.get("voice_delivery") or "verdict"),
+        "sfx_enabled": config.get("sfx_enabled") is not False,
+        "ui_target_profile": str(config.get("ui_target_profile") or MID_CTA_UI_TARGET_PROFILE),
+        "arrow_target": {
+            "x": float(target.get("x", MID_CTA_DEFAULT_TARGET_X)),
+            "y": float(target.get("y", MID_CTA_DEFAULT_TARGET_Y)),
+        },
+    }
+
+
+def brand_close_selection(mid_cta_report: dict) -> dict:
+    return {
+        "enabled": True,
+        "variant": "brand-close",
+        "headline": "뉴스한면",
+        "prompt": "다음 소식도 바로",
+        "narration": "",
+        "discussion_prompt": "",
+        "selection_strategy": "mid-cta-brand-close-v1",
+        "selection_reason": "중간 CTA에서 구독을 요청해 마지막에는 브랜드 마감만 사용합니다.",
+        "distribution": None,
+        "distribution_basis": None,
+        "distribution_bucket": None,
+        "duration": BRAND_CLOSE_DURATION,
+        "voice_enabled": False,
+        "style": "common-dark-yellow",
+        "mid_cta_insert_after_scene_id": mid_cta_report.get("insert_after_scene_id"),
+    }
 
 
 def select_cta_tail_variant(project: dict, storyboard: dict) -> dict:
@@ -5752,6 +7983,311 @@ def create_cta_audio(path: Path, duration: float) -> None:
     )
 
 
+def create_brand_close_audio(path: Path, duration: float) -> None:
+    second_ms = max(180, round(max(0.25, duration - 0.25) * 1000))
+    run_command(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=620:sample_rate=48000:duration=0.11",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=760:sample_rate=48000:duration=0.10",
+            "-filter_complex",
+            f"[0:a]volume=0.35,afade=t=out:st=0.06:d=0.05[a1];"
+            f"[1:a]volume=0.25,afade=t=out:st=0.05:d=0.05,adelay={second_ms}|{second_ms}[a2];"
+            f"[a1][a2]amix=inputs=2:duration=longest,apad,atrim=duration={duration:.3f}[a]",
+            "-map",
+            "[a]",
+            "-ac",
+            "2",
+            "-ar",
+            "48000",
+            "-c:a",
+            "pcm_s16le",
+            "-y",
+            str(path),
+        ]
+    )
+
+
+def create_mid_cta_sfx(path: Path, duration: float) -> None:
+    arrival_ms = max(0, round(min(1.0, max(0.45, duration - 0.45)) * 1000))
+    second_ms = arrival_ms + 70
+    run_command(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=720:sample_rate=48000:duration=0.07",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=1080:sample_rate=48000:duration=0.05",
+            "-filter_complex",
+            f"[0:a]volume=0.055,adelay={arrival_ms}|{arrival_ms}[a1];"
+            f"[1:a]volume=0.03,adelay={second_ms}|{second_ms}[a2];"
+            f"[a1][a2]amix=inputs=2:duration=longest,apad,atrim=duration={duration:.3f}[a]",
+            "-map",
+            "[a]",
+            "-ac",
+            "2",
+            "-ar",
+            "48000",
+            "-c:a",
+            "pcm_s16le",
+            "-y",
+            str(path),
+        ]
+    )
+
+
+def mix_mid_cta_audio(
+    voice_audio: Path | None,
+    sfx_audio: Path,
+    destination: Path,
+    duration: float,
+) -> None:
+    if voice_audio is None:
+        normalize_editor_audio(sfx_audio, destination)
+        return
+    run_command(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            str(voice_audio),
+            "-i",
+            str(sfx_audio),
+            "-filter_complex",
+            f"[0:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
+            f"apad,atrim=duration={duration:.3f}[voice];"
+            f"[1:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
+            f"apad,atrim=duration={duration:.3f}[sfx];"
+            "[voice][sfx]amix=inputs=2:duration=longest:normalize=0,"
+            f"alimiter=limit=0.95,atrim=duration={duration:.3f}[a]",
+            "-map",
+            "[a]",
+            "-ac",
+            "2",
+            "-ar",
+            "48000",
+            "-c:a",
+            "pcm_s16le",
+            "-y",
+            str(destination),
+        ]
+    )
+
+
+def render_mid_cta_frames(selection: dict, frames_dir: Path, duration: float) -> int:
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError as exc:
+        raise News2ShortsError("중간 CTA 렌더에는 Pillow가 필요합니다.") from exc
+    frames_dir.mkdir(parents=True, exist_ok=True)
+    width, height = OUTPUT_VIDEO_SIZE
+    fps = 30
+    frame_count = max(1, round(duration * fps))
+    font_path = find_font()
+    headline_font = load_font_face(font_path, 41, bold=True)
+    emphasis_font = load_font_face(font_path, 61, bold=True)
+    subline_font = load_font_face(font_path, 38, bold=True)
+    logo = Image.open(BRAND_LOGO_PATH).convert("RGBA").resize((68, 68))
+    target = selection.get("arrow_target") if isinstance(selection.get("arrow_target"), dict) else {}
+    target_x = min(0.50, max(0.18, float(target.get("x", MID_CTA_DEFAULT_TARGET_X)))) * width
+    target_y = min(0.92, max(0.78, float(target.get("y", MID_CTA_DEFAULT_TARGET_Y)))) * height
+
+    def centered_text(draw, text: str, font, y: int, fill: tuple[int, int, int, int]) -> None:
+        box = draw.textbbox((0, 0), text, font=font)
+        draw.text(((width - (box[2] - box[0])) // 2, y), text, font=font, fill=fill)
+
+    for frame_index in range(frame_count):
+        second = frame_index / fps
+        canvas = Image.new("RGBA", (width, height), "#090A0C")
+        canvas.alpha_composite(logo, (24, 24))
+        layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(layer)
+        fade_in = min(1.0, second / 0.12)
+        fade_out = min(1.0, max(0.0, duration - second) / 0.15)
+        alpha = max(0, min(255, round(255 * min(fade_in, fade_out))))
+        draw.rounded_rectangle(
+            (74, 265, 646, 835),
+            radius=46,
+            fill=(17, 21, 26, alpha),
+            outline=(43, 49, 57, alpha),
+            width=4,
+        )
+        draw.rounded_rectangle((286, 338, 434, 350), radius=6, fill=(255, 242, 0, alpha))
+        centered_text(draw, str(selection.get("headline") or ""), headline_font, 420, (255, 255, 255, alpha))
+        centered_text(draw, str(selection.get("emphasis") or ""), emphasis_font, 515, (255, 242, 0, alpha))
+        centered_text(draw, str(selection.get("subline") or ""), subline_font, 655, (255, 255, 255, alpha))
+        progress = min(1.0, max(0.0, (second - 0.25) / max(0.20, duration - 0.65)))
+        eased = 1.0 - (1.0 - progress) ** 3
+        start_x, start_y = 410.0, 785.0
+        arrow_x = start_x + (target_x - start_x) * eased
+        arrow_y = start_y + (target_y - start_y) * eased + 8.0 * math.sin(progress * 4.0 * math.pi)
+        draw.line(
+            (arrow_x, arrow_y - 58, arrow_x, arrow_y),
+            fill=(255, 242, 0, alpha),
+            width=16,
+        )
+        draw.polygon(
+            [
+                (arrow_x - 28, arrow_y - 15),
+                (arrow_x + 28, arrow_y - 15),
+                (arrow_x, arrow_y + 22),
+            ],
+            fill=(255, 242, 0, alpha),
+        )
+        if progress > 0.72:
+            ring_progress = min(1.0, (progress - 0.72) / 0.18)
+            ring_alpha = round(alpha * ring_progress * (1.0 - max(0.0, progress - 0.92) / 0.08))
+            draw.ellipse(
+                (target_x - 60, target_y - 44, target_x + 60, target_y + 44),
+                outline=(255, 242, 0, max(0, ring_alpha)),
+                width=7,
+            )
+        output = Image.alpha_composite(canvas, layer).convert("RGB")
+        output.save(frames_dir / f"{frame_index:04d}.png", format="PNG", compress_level=3)
+    return frame_count
+
+
+def render_mid_cta(
+    selection: dict,
+    work_dir: Path,
+    destination: Path,
+    *,
+    no_tts: bool,
+    tts_provider: str,
+    voice: str,
+    rate: int,
+    typecast_voice_id: str,
+    typecast_voice_name: str,
+    typecast_tempo: float,
+    previous_text: str,
+    next_text: str,
+) -> tuple[dict, Path]:
+    if selection.get("enabled") is not True:
+        return selection, work_dir / "mid-cta-none.wav"
+    narration = suppress_editorial_identifiers(str(selection.get("narration") or "").strip())
+    voice_enabled = selection.get("voice_enabled") is not False
+    voice_audio: Path | None = None
+    rendered_voice_id: str | None = None
+    rendered_voice_name: str | None = None
+    audio_source = "original-synthetic-tone"
+    measured_voice = 0.0
+    if voice_enabled and narration and not no_tts and tts_provider == "typecast":
+        voice_audio = work_dir / "mid-cta-typecast.wav"
+        typecast_audio(
+            voice_audio,
+            narration,
+            voice_id=typecast_voice_id,
+            tempo=typecast_tempo,
+            previous_text=previous_text,
+            next_text=next_text,
+            delivery=str(selection.get("voice_delivery") or "verdict"),
+        )
+        measured_voice = audio_duration(voice_audio)
+        rendered_voice_id = typecast_voice_id
+        rendered_voice_name = typecast_voice_name
+        audio_source = "typecast+original-synthetic-tone"
+    elif voice_enabled and narration and not no_tts and tts_provider == "local":
+        say = shutil.which("say")
+        if not say:
+            raise News2ShortsError("중간 CTA 음성을 만들 로컬 TTS를 찾지 못했습니다.")
+        voice_audio = work_dir / "mid-cta-local.aiff"
+        run_command([say, "-v", voice, "-r", str(rate), "-o", str(voice_audio), narration])
+        measured_voice = audio_duration(voice_audio)
+        rendered_voice_name = voice
+        audio_source = "local+original-synthetic-tone"
+    min_duration = float(selection.get("min_duration") or MID_CTA_MIN_DURATION)
+    max_duration = float(selection.get("max_duration") or MID_CTA_MAX_DURATION)
+    duration = max(min_duration, measured_voice + MID_CTA_AUDIO_TAIL_SECONDS)
+    if duration > max_duration + 0.01:
+        raise News2ShortsError(
+            f"중간 CTA 음성이 {max_duration:.1f}초 안에 들어오지 않습니다. 문구를 더 짧게 작성하세요."
+        )
+    duration = min(max_duration, duration)
+    sfx_audio = work_dir / "mid-cta-sfx.wav"
+    if selection.get("sfx_enabled") is False:
+        create_silent_audio(sfx_audio, duration)
+    else:
+        create_mid_cta_sfx(sfx_audio, duration)
+    audio = work_dir / "mid-cta.wav"
+    mix_mid_cta_audio(voice_audio, sfx_audio, audio, duration)
+    frames_dir = work_dir / "mid-cta-frames"
+    frame_count = render_mid_cta_frames(selection, frames_dir, duration)
+    run_command(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-framerate",
+            "30",
+            "-i",
+            str(frames_dir / "%04d.png"),
+            "-i",
+            str(audio),
+            "-t",
+            f"{duration:.3f}",
+            "-map",
+            "0:v:0",
+            "-map",
+            "1:a:0",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "medium",
+            "-crf",
+            "18",
+            "-pix_fmt",
+            "yuv420p",
+            "-r",
+            "30",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-ar",
+            "48000",
+            "-movflags",
+            "+faststart",
+            "-y",
+            str(destination),
+        ]
+    )
+    report = dict(selection)
+    report.update(
+        {
+            "duration": round(duration, 3),
+            "narration": narration,
+            "audio": audio_source,
+            "audio_duration": round(audio_duration(audio), 3),
+            "voice_id": rendered_voice_id,
+            "voice_name": rendered_voice_name,
+            "frame_count": frame_count,
+            "fps": 30,
+            "srt_generated": False,
+            "fake_button_rendered": False,
+        }
+    )
+    return report, audio
+
+
 def render_cta_tail(
     project: dict,
     selection: dict,
@@ -5781,12 +8317,15 @@ def render_cta_tail(
         return {"enabled": False}
     configured_duration = min(
         MAX_CTA_TAIL_DURATION,
-        max(MIN_CTA_TAIL_DURATION, float(config.get("duration") or DEFAULT_CTA_TAIL_DURATION)),
+        max(
+            MIN_CTA_TAIL_DURATION,
+            float(selection.get("duration") or config.get("duration") or DEFAULT_CTA_TAIL_DURATION),
+        ),
     )
     headline = suppress_editorial_identifiers(str(selection.get("headline") or "").strip())
     prompt = suppress_editorial_identifiers(str(selection.get("prompt") or "").strip())
     narration = suppress_editorial_identifiers(str(selection.get("narration") or "").strip())
-    voice_enabled = config.get("voice_enabled") is not False
+    voice_enabled = selection.get("voice_enabled", config.get("voice_enabled")) is not False
     width, height = OUTPUT_VIDEO_SIZE
     canvas = Image.new("RGB", (width, height), "#090A0C")
     draw = ImageDraw.Draw(canvas)
@@ -5849,7 +8388,10 @@ def render_cta_tail(
         rendered_voice_name = voice
     else:
         audio = work_dir / "cta-tail-tone.wav"
-        create_cta_audio(audio, configured_duration)
+        if str(selection.get("variant") or "") == "brand-close":
+            create_brand_close_audio(audio, configured_duration)
+        else:
+            create_cta_audio(audio, configured_duration)
         measured_audio = audio_duration(audio)
 
     if audio_source in {"typecast", "local"}:
@@ -5874,7 +8416,7 @@ def render_cta_tail(
         "distribution_basis": selection.get("distribution_basis"),
         "distribution_bucket": selection.get("distribution_bucket"),
         "voice_enabled": voice_enabled,
-        "style": str(config.get("style") or "common-dark-yellow"),
+        "style": str(selection.get("style") or config.get("style") or "common-dark-yellow"),
         "audio": audio_source,
         "audio_duration": round(measured_audio, 3),
         "voice_id": rendered_voice_id,
@@ -6077,6 +8619,25 @@ def render_composite_thumbnail(
         raise News2ShortsError(
             "thumbnail_badge는 일반 감탄어가 아닌 3-14자의 주제별 조건·비용·공백·반전이어야 합니다."
         )
+    thumbnail_status = str(settings.get("thumbnail_status") or "").strip()
+    thumbnail_file = str(settings.get("thumbnail_file") or "").strip()
+    if thumbnail_status == "blocked_rights" and not thumbnail_file:
+        return {
+            "status": "blocked_rights",
+            "path": "",
+            "hook": hook,
+            "subhook": subhook,
+            "badge": badge,
+            "source_assets": [],
+            "reason": str(settings.get("thumbnail_note") or "권리 승인 이미지가 필요합니다."),
+            "thumbnail_style": requested_thumbnail_style,
+            "presenter_used": False,
+            "presenter_context_reviewed": False,
+            "attention_first": True,
+            "purpose": "dedicated-curiosity-thumbnail",
+            "separate_asset": True,
+            "question_led": True,
+        }
     sources = thumbnail_source_paths(project_dir, storyboard, manifest)
     if project.get("sensitive_topic") is True and requested_thumbnail_style == "presenter-led":
         raise News2ShortsError("민감 뉴스는 진행자형 썸네일 대신 직접 근거 중심 썸네일을 사용하세요.")
@@ -6204,6 +8765,7 @@ def render_composite_thumbnail(
     relative_output = output.relative_to(project_dir).as_posix()
     settings["thumbnail_method"] = "file_upload"
     settings["thumbnail_file"] = relative_output
+    settings["thumbnail_status"] = "ready"
     settings["thumbnail_hook"] = hook
     settings["thumbnail_subhook"] = subhook
     settings["thumbnail_badge"] = badge
@@ -6261,10 +8823,749 @@ def cmd_thumbnail(args: argparse.Namespace) -> int:
     return 0
 
 
+def validate_public_https_url(value: str, label: str) -> str:
+    parsed = parse.urlsplit(value)
+    hostname = (parsed.hostname or "").strip().lower()
+    if parsed.scheme != "https" or not hostname or parsed.username or parsed.password:
+        raise News2ShortsError(f"{label}은 공개 HTTPS URL이어야 합니다.")
+    try:
+        addresses = {
+            item[4][0]
+            for item in socket.getaddrinfo(hostname, parsed.port or 443, type=socket.SOCK_STREAM)
+        }
+    except OSError as exc:
+        raise News2ShortsError(f"{label} 호스트를 확인할 수 없습니다: {hostname}") from exc
+    if not addresses:
+        raise News2ShortsError(f"{label} 호스트 주소가 없습니다: {hostname}")
+    for address in addresses:
+        ip = ipaddress.ip_address(address)
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        ):
+            raise News2ShortsError(f"{label}은 공개 인터넷 호스트여야 합니다: {hostname}")
+    return value
+
+
+class PublicImageRedirectHandler(request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
+        validate_public_https_url(newurl, "redirect URL")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def download_public_image(url: str) -> tuple[bytes, str, str]:
+    validate_public_https_url(url, "image URL")
+    opener = request.build_opener(
+        request.ProxyHandler({}),
+        PublicImageRedirectHandler(),
+        request.HTTPSHandler(context=verified_ssl_context()),
+    )
+    req = request.Request(
+        url,
+        headers={
+            "Accept": "image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8",
+            "User-Agent": "news2shorts/0.36 public-image-review",
+        },
+        method="GET",
+    )
+    try:
+        with opener.open(req, timeout=30) as response:
+            final_url = response.geturl()
+            validate_public_https_url(final_url, "final image URL")
+            content_type = response.headers.get_content_type().lower()
+            if not content_type.startswith("image/"):
+                raise News2ShortsError(
+                    f"인터넷 응답이 이미지가 아닙니다: {content_type or 'unknown'}"
+                )
+            content_length = response.headers.get("Content-Length")
+            if content_length and int(content_length) > MAX_INTERNET_IMAGE_BYTES:
+                raise News2ShortsError("인터넷 이미지가 25 MiB 제한을 초과합니다.")
+            data = response.read(MAX_INTERNET_IMAGE_BYTES + 1)
+    except error.HTTPError as exc:
+        raise News2ShortsError(f"인터넷 이미지 요청 실패: HTTP {exc.code}") from exc
+    except error.URLError as exc:
+        raise News2ShortsError(f"인터넷 이미지 연결 실패: {exc.reason}") from exc
+    if len(data) > MAX_INTERNET_IMAGE_BYTES:
+        raise News2ShortsError("인터넷 이미지가 25 MiB 제한을 초과합니다.")
+    if not data:
+        raise News2ShortsError("인터넷 이미지 응답이 비어 있습니다.")
+    return data, final_url, content_type
+
+
+def cmd_collect_internet_visual(args: argparse.Namespace) -> int:
+    project_dir = Path(args.project_dir).expanduser().resolve()
+    if not project_dir.is_dir():
+        fail(f"프로젝트 디렉터리를 찾을 수 없습니다: {project_dir}")
+    validate_public_https_url(args.source_page, "source page")
+    project = load_json(project_dir / "project.json")
+    storyboard = load_json(project_dir / "storyboard.json")
+    manifest = load_json(project_dir / "rights-manifest.json")
+    if not all(isinstance(value, dict) for value in (project, storyboard, manifest)):
+        fail("인터넷 이미지 등록에 필요한 프로젝트 JSON 객체를 확인하세요.")
+    visual_sourcing = project.get("visual_sourcing")
+    if not isinstance(visual_sourcing, dict):
+        fail("project.json의 visual_sourcing을 확인하세요.")
+    korean_visuals_required = visual_sourcing.get("korean_visuals_required") is True
+    international_visuals = visual_sourcing.get("international_source_visuals")
+    international_visuals_enabled = (
+        isinstance(international_visuals, dict)
+        and international_visuals.get("enabled") is True
+    )
+    if korean_visuals_required:
+        if args.visual_locale != DEFAULT_VISUAL_LOCALE:
+            fail("한국 이미지 전용 프로젝트에는 --visual-locale ko-KR이 필요합니다.")
+        if not args.confirm_korean_context:
+            fail("실제 이미지를 확인한 뒤 --confirm-korean-context가 필요합니다.")
+        if len(args.korean_context_note.strip()) < 12:
+            fail(
+                "--korean-context-note에는 한국어 표지판·국내 도로·건축·차량 환경 등 "
+                "한국 배경 근거를 구체적으로 작성하세요."
+            )
+    elif international_visuals_enabled:
+        assert isinstance(international_visuals, dict)
+        source_locale = str(international_visuals.get("source_locale") or "").strip()
+        source_country = str(international_visuals.get("source_country") or "").strip().upper()
+        if args.visual_locale == DEFAULT_VISUAL_LOCALE:
+            if not args.confirm_korean_context or len(args.korean_context_note.strip()) < 12:
+                fail("한국 대응 이미지는 한국 배경 확인과 구체적인 근거가 필요합니다.")
+        else:
+            if args.visual_locale not in {source_locale, "neutral"}:
+                fail(f"국제 실제사건 이미지는 --visual-locale {source_locale} 또는 neutral이 필요합니다.")
+            if str(args.source_country or "").strip().upper() != source_country:
+                fail(f"국제 실제사건 이미지는 --source-country {source_country}가 필요합니다.")
+            if not args.confirm_source_event_context:
+                fail("실제 사건 이미지를 확인한 뒤 --confirm-source-event-context가 필요합니다.")
+            if len(args.source_event_context_note.strip()) < 12:
+                fail("--source-event-context-note에 실제 사건·장소·시점 근거를 작성하세요.")
+    scenes = storyboard.get("scenes")
+    assets = manifest.get("assets")
+    searches = manifest.get("searches")
+    if not isinstance(scenes, list) or not isinstance(assets, list) or not isinstance(searches, list):
+        fail("storyboard 또는 rights-manifest 배열을 확인하세요.")
+    scene = next(
+        (
+            item
+            for item in scenes
+            if isinstance(item, dict) and str(item.get("id") or "").strip() == args.scene_id
+        ),
+        None,
+    )
+    if scene is None:
+        fail(f"storyboard 장면을 찾지 못했습니다: {args.scene_id}")
+    existing_visual = str(scene.get("video") or scene.get("image") or "").strip()
+    if existing_visual and not args.overwrite:
+        fail(f"장면에 기존 시각 자산이 있습니다: {args.scene_id}: {existing_visual}")
+    if not args.confirm_news_relevance:
+        fail("실제 이미지를 확인한 뒤 --confirm-news-relevance가 필요합니다.")
+    if len(args.relevance_note.strip()) < 12:
+        fail("--relevance-note에는 장면의 인물·대상·행동·결과 연결을 구체적으로 작성하세요.")
+    permission_status = args.permission_status
+    approved = permission_status in {"owned", "licensed", "permission_confirmed"}
+    if approved and not args.permission_reference.strip():
+        fail("확인된 권리 상태에는 --permission-reference가 필요합니다.")
+    data, final_url, content_type = download_public_image(args.image_url)
+    try:
+        from PIL import Image, ImageOps
+
+        with Image.open(io.BytesIO(data)) as opened:
+            image = ImageOps.exif_transpose(opened).convert("RGB")
+            width, height = image.size
+            if width <= 0 or height <= 0 or width * height > MAX_INTERNET_IMAGE_PIXELS:
+                raise News2ShortsError("인터넷 이미지의 픽셀 크기가 허용 범위를 벗어납니다.")
+            image.thumbnail((2160, 3840), Image.Resampling.LANCZOS)
+            output_value = args.output or f"assets/collected/internet-{slugify(args.scene_id)}.png"
+            output = resolve_project_file(project_dir, output_value, must_exist=False)
+            if output.exists() and not args.overwrite:
+                fail(f"인터넷 이미지 출력이 이미 있습니다: {output}")
+            output.parent.mkdir(parents=True, exist_ok=True)
+            image.save(output, format="PNG", optimize=True)
+    except News2ShortsError:
+        raise
+    except Exception as exc:
+        raise News2ShortsError(f"인터넷 이미지 파일을 확인할 수 없습니다: {exc}") from exc
+    relative = output.relative_to(project_dir).as_posix()
+    kind = "licensed" if permission_status == "licensed" else "owned" if permission_status == "owned" else "official" if permission_status == "permission_confirmed" else "unreviewed"
+    record = {
+        "id": f"internet-{slugify(args.scene_id)}",
+        "path": relative,
+        "kind": kind,
+        "media_type": "photo",
+        "source_method": "web_search",
+        "source_url": args.source_page,
+        "download_url": final_url,
+        "content_type": content_type,
+        "creator": args.creator.strip(),
+        "publisher": args.publisher.strip(),
+        "license": args.permission_reference.strip() or "rights pending user review",
+        "permission_status": permission_status,
+        "attribution": args.attribution.strip() or args.publisher.strip() or args.creator.strip(),
+        "retrieved_at": iso_now(),
+        "sha256": file_sha256(output),
+        "synthetic": False,
+        "approved": approved,
+        "local_review_only": not approved,
+        "news_relevance_reviewed": True,
+        "whiteboard_text_free_reviewed": bool(args.confirm_whiteboard_text_free),
+        "relevance_level": args.relevance_level,
+        "relevance_note": args.relevance_note.strip(),
+        "visual_locale": args.visual_locale or "",
+        "korean_context_reviewed": bool(args.confirm_korean_context),
+        "korean_context_note": args.korean_context_note.strip(),
+        "source_country": str(args.source_country or "").strip().upper(),
+        "source_event_context_reviewed": bool(args.confirm_source_event_context),
+        "source_event_context_note": args.source_event_context_note.strip(),
+        "actual_event_media": bool(args.confirm_source_event_context),
+        "user_will_confirm_rights_before_publish": True,
+        "watermark_removed": False,
+    }
+    assets[:] = [
+        item
+        for item in assets
+        if not (isinstance(item, dict) and str(item.get("path") or "") == relative)
+    ]
+    assets.append(record)
+    searches.append(
+        {
+            "query": args.query.strip() or args.relevance_note.strip(),
+            "scene_ids": [args.scene_id],
+            "searched_at": iso_now(),
+            "outcome": "collected",
+            "selected_asset_path": relative,
+            "note": "공개 HTTPS 이미지를 로컬 검토용으로 수집했으며 게시 전 사용 권리 확인이 필요합니다.",
+        }
+    )
+    scene["image"] = relative
+    scene["video"] = ""
+    scene["image_fit"] = "auto"
+    scene["synthetic"] = False
+    scene["credit"] = record["attribution"]
+    project["updated_at"] = iso_now()
+    write_json(project_dir / "project.json", project)
+    write_json(project_dir / "storyboard.json", storyboard)
+    write_json(project_dir / "rights-manifest.json", manifest)
+    print(
+        json.dumps(
+            {
+                "project_dir": str(project_dir),
+                "scene_id": args.scene_id,
+                "asset": relative,
+                "source_page": args.source_page,
+                "permission_status": permission_status,
+                "local_review_only": not approved,
+                "visible_review_badge": False,
+                "publish_blocked_until_rights_review": not approved,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def whiteboard_cli_path() -> Path:
+    candidates = [PLUGIN_ROOT.parent / "whiteboard-shorts" / "scripts" / "whiteboard_shorts.py"]
+    current = Path.cwd().resolve()
+    candidates.extend(
+        base / "plugins" / "whiteboard-shorts" / "scripts" / "whiteboard_shorts.py"
+        for base in (current, *current.parents)
+    )
+    path = next((candidate for candidate in candidates if candidate.is_file()), None)
+    if path is None:
+        raise News2ShortsError(
+            "whiteboard-shorts 실행기를 찾지 못했습니다. 같은 marketplace의 설치·소스 상태를 확인하세요."
+        )
+    return path
+
+
+def srt_time(milliseconds: int) -> str:
+    hours, remainder = divmod(milliseconds, 3_600_000)
+    minutes, remainder = divmod(remainder, 60_000)
+    seconds, millis = divmod(remainder, 1_000)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d},{millis:03d}"
+
+
+def write_whiteboard_srt(path: Path, scenes: list[dict]) -> float:
+    cursor = 0
+    blocks: list[str] = []
+    for index, scene in enumerate(scenes, start=1):
+        duration_ms = max(1000, round(float(scene.get("duration") or 0.0) * 1000))
+        end = cursor + duration_ms
+        narration = str(scene.get("narration") or scene.get("caption") or "").strip()
+        if not narration:
+            raise News2ShortsError(f"whiteboard 장면 {index}의 narration이 비어 있습니다.")
+        blocks.append(
+            f"{index}\n{srt_time(cursor)} --> {srt_time(end)}\n{narration}"
+        )
+        cursor = end
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n\n".join(blocks) + "\n", encoding="utf-8")
+    return cursor / 1000
+
+
+def whiteboard_permission_status(record: dict) -> str:
+    explicit = str(record.get("permission_status") or "").strip()
+    if explicit in {
+        "owned",
+        "licensed",
+        "permission_confirmed",
+        "review_required",
+        "unknown",
+        "not_permitted",
+    }:
+        return explicit
+    kind = str(record.get("kind") or "").strip()
+    if record.get("approved") is True:
+        if kind in {"owned", "generated"}:
+            return "owned"
+        if kind == "licensed":
+            return "licensed"
+        if kind == "official":
+            return "permission_confirmed"
+    return "unknown" if kind == "unreviewed" else "review_required"
+
+
+def render_whiteboard_source_frame(scene: dict, project_dir: Path, destination: Path) -> None:
+    image_value = str(scene.get("image") or "").strip()
+    video_value = str(scene.get("video") or "").strip()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if image_value:
+        render_retention_visual(scene, project_dir, destination)
+        return
+    if video_value:
+        video_path = resolve_project_file(project_dir, video_value)
+        start = max(0.0, float(scene.get("video_start") or 0.0))
+        run_command(
+            [
+                shutil.which("ffmpeg") or "ffmpeg",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-ss",
+                f"{start:.3f}",
+                "-i",
+                str(video_path),
+                "-frames:v",
+                "1",
+                "-vf",
+                "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=#F5EBD7",
+                "-y",
+                str(destination),
+            ]
+        )
+        return
+    raise News2ShortsError("whiteboard 변환에는 각 장면의 image 또는 video가 필요합니다.")
+
+
+def render_whiteboard_ink(source: Path, destination: Path) -> None:
+    try:
+        from PIL import Image, ImageEnhance, ImageFilter, ImageOps
+    except ImportError as exc:
+        raise News2ShortsError("whiteboard 이미지 변환에는 Pillow가 필요합니다.") from exc
+    with Image.open(source) as opened:
+        original = ImageOps.exif_transpose(opened).convert("RGB")
+        original = ImageOps.fit(original, (1080, 1920), method=Image.Resampling.LANCZOS)
+    paper = Image.new("RGB", original.size, "#F5EBD7")
+    muted = ImageEnhance.Color(original).enhance(0.12)
+    muted = ImageOps.posterize(muted, 4)
+    base = Image.blend(paper, muted, 0.16)
+    gray = ImageOps.grayscale(original).filter(ImageFilter.FIND_EDGES)
+    edge_mask = ImageOps.autocontrast(gray).point(lambda value: 0 if value < 34 else min(225, value * 2))
+    ink = Image.new("RGB", original.size, "#35383B")
+    base.paste(ink, mask=edge_mask)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    base.save(destination, format="PNG", optimize=True)
+
+
+def whiteboard_caption_beat(index: int, count: int) -> str:
+    if index == 0:
+        return "hook"
+    if index == count - 1:
+        return "payoff"
+    if index == max(1, count // 2):
+        return "rehook"
+    return "setup" if index < count // 2 else "escalation"
+
+
+def cmd_prepare_whiteboard(args: argparse.Namespace) -> int:
+    project_dir = Path(args.project_dir).expanduser().resolve()
+    if not project_dir.is_dir():
+        fail(f"프로젝트 디렉터리를 찾을 수 없습니다: {project_dir}")
+    errors, warnings = validate_project(project_dir, final=False)
+    if errors:
+        fail("whiteboard 준비 전 검증 실패:\n- " + "\n- ".join(errors))
+    for warning in warnings:
+        print(f"warning: {warning}", file=sys.stderr)
+    project = load_json(project_dir / "project.json")
+    storyboard = load_json(project_dir / "storyboard.json")
+    manifest = load_json(project_dir / "rights-manifest.json")
+    if not all(isinstance(value, dict) for value in (project, storyboard, manifest)):
+        fail("whiteboard 준비에 필요한 프로젝트 JSON 객체를 확인하세요.")
+    scenes = storyboard.get("scenes")
+    if not isinstance(scenes, list) or not scenes:
+        fail("whiteboard로 변환할 뉴스 장면이 없습니다.")
+    target_value = args.output_dir or "whiteboard-project"
+    whiteboard_dir = resolve_project_file(project_dir, target_value, must_exist=False)
+    if whiteboard_dir == project_dir:
+        fail("whiteboard 출력은 원 뉴스 프로젝트와 다른 하위 폴더여야 합니다.")
+    if whiteboard_dir.exists():
+        if not args.overwrite:
+            fail(f"whiteboard 프로젝트가 이미 있습니다: {whiteboard_dir}")
+        shutil.rmtree(whiteboard_dir)
+    source_srt = project_dir / "assets" / "whiteboard" / "news-story.srt"
+    if source_srt.exists() and not args.overwrite:
+        fail(f"whiteboard SRT가 이미 있습니다: {source_srt}")
+    total_seconds = write_whiteboard_srt(source_srt, scenes)
+    run_command(
+        [
+            sys.executable,
+            str(whiteboard_cli_path()),
+            "init",
+            "--project-dir",
+            str(whiteboard_dir),
+            "--srt",
+            str(source_srt),
+            "--title",
+            str(project.get("title") or project_dir.name),
+            "--rights-status",
+            "owned",
+            "--rights-reference",
+            "news2shorts original Korean narration",
+            "--target-sec",
+            "0.1",
+            "--min-sec",
+            "0.1",
+            "--max-sec",
+            "90",
+        ]
+    )
+    whiteboard_project = load_json(whiteboard_dir / "project.json")
+    scene_plan = load_json(whiteboard_dir / "scene-plan.json")
+    rights = load_json(whiteboard_dir / "rights-manifest.json")
+    postproduction = load_json(whiteboard_dir / "post-production.json")
+    if not all(isinstance(value, dict) for value in (whiteboard_project, scene_plan, rights, postproduction)):
+        fail("whiteboard 프로젝트 초기화 결과가 올바르지 않습니다.")
+    scene_files = scene_plan.get("scene_files")
+    if not isinstance(scene_files, list) or len(scene_files) != len(scenes):
+        fail("뉴스 장면과 whiteboard 장면 수가 일치하지 않습니다.")
+
+    asset_records: list[dict] = []
+    caption_items: list[dict] = []
+    music_segments: list[dict] = []
+    motion_items: list[dict] = []
+    permission_statuses: list[str] = []
+    source_frames = whiteboard_dir / "input" / "news-source-frames"
+    source_frames.mkdir(parents=True, exist_ok=True)
+    for index, (scene, scene_file) in enumerate(zip(scenes, scene_files), start=1):
+        if not isinstance(scene, dict):
+            fail(f"뉴스 장면 {index} 형식이 올바르지 않습니다.")
+        visual = str(scene.get("video") or scene.get("image") or "").strip()
+        if not visual:
+            fail(f"whiteboard 장면 {index}에 실제 뉴스 image 또는 video가 필요합니다.")
+        record = rights_record_for(manifest, visual)
+        if not isinstance(record, dict):
+            fail(f"whiteboard 장면의 권리·출처 기록이 없습니다: {visual}")
+        permission_status = whiteboard_permission_status(record)
+        if permission_status == "not_permitted":
+            fail(f"not_permitted 자산은 whiteboard 검토본에도 사용할 수 없습니다: {visual}")
+        if record.get("news_relevance_reviewed") is not True:
+            fail(f"기사 연관성 육안 검토가 필요합니다: {visual}")
+        if record.get("whiteboard_text_free_reviewed") is not True:
+            fail(f"whiteboard 변환 전 원본 이미지의 문자·로고 영역 검토가 필요합니다: {visual}")
+        permission_statuses.append(permission_status)
+        scene_id = f"scene-{index:02d}"
+        source_frame = source_frames / f"{scene_id}.png"
+        scene_image = whiteboard_dir / "scenes" / f"{scene_id}.png"
+        render_whiteboard_source_frame(scene, project_dir, source_frame)
+        render_whiteboard_ink(source_frame, scene_image)
+        whiteboard_scene_path = whiteboard_dir / str(scene_file)
+        whiteboard_scene = load_json(whiteboard_scene_path)
+        if not isinstance(whiteboard_scene, dict):
+            fail(f"whiteboard 장면 파일이 올바르지 않습니다: {scene_file}")
+        narration = str(scene.get("narration") or scene.get("caption") or "").strip()
+        basis = str(record.get("relevance_note") or narration).strip()
+        whiteboard_scene["visual_description"] = basis
+        whiteboard_scene["news_source"] = {
+            "project": str(project_dir),
+            "scene_id": str(scene.get("id") or scene_id),
+            "asset_path": visual,
+            "source_ids": scene.get("source_ids") or [],
+            "claim_ids": scene.get("claim_ids") or [],
+        }
+        write_json(whiteboard_scene_path, whiteboard_scene)
+        duration_ms = int(whiteboard_scene.get("scene_duration_ms") or 0)
+        reveal_duration = max(200, duration_ms - 600)
+        annotation = {
+            "sceneId": scene_id,
+            "canvas": {"width": 1080, "height": 1920},
+            "storyBasis": basis,
+            "sceneDurationMs": duration_ms,
+            "elements": [
+                {
+                    "id": "news-evidence",
+                    "label": "뉴스 근거 이미지",
+                    "sequence": 1,
+                    "narrativeRole": str(scene.get("beat") or "evidence"),
+                    "subtitle": narration,
+                    "type": "evidence",
+                    "region": {"x": 40, "y": 80, "width": 1000, "height": 1760},
+                    "reveal": {
+                        "direction": "top_to_bottom",
+                        "startMs": 100,
+                        "durationMs": reveal_duration,
+                        "maskPaddingPx": 16,
+                        "protectedRegions": [],
+                    },
+                    "handPath": {
+                        "start": [540, 100],
+                        "end": [540, 1800],
+                        "easing": "easeInOut",
+                    },
+                }
+            ],
+        }
+        write_json(whiteboard_dir / "scenes" / f"{scene_id}.annotation.json", annotation)
+        asset_records.append(
+            {
+                "id": f"{scene_id}-image",
+                "kind": "scene_image",
+                "path": f"scenes/{scene_id}.png",
+                "sha256": file_sha256(scene_image),
+                "creator": str(record.get("creator") or record.get("publisher") or "unknown"),
+                "original_url": str(record.get("source_url") or ""),
+                "permission_status": permission_status,
+                "permission_reference": str(record.get("license") or ""),
+                "synthetic": True,
+                "transform": "news2shorts-edge-derived-whiteboard",
+                "source_asset_path": visual,
+                "usage_scope": "local_whiteboard_review",
+            }
+        )
+        caption = str(scene.get("caption") or scene.get("headline") or narration).strip()[:36]
+        beat = whiteboard_caption_beat(index - 1, len(scenes))
+        caption_items.append(
+            {
+                "scene_id": scene_id,
+                "text": caption,
+                "position": "top" if index % 2 else "bottom",
+                "beat": beat,
+            }
+        )
+        music_segments.append(
+            {
+                "scene_id": scene_id,
+                "profile_id": "tension" if beat in {"rehook", "escalation"} else "gentle",
+                "impact": beat in {"rehook", "payoff"},
+            }
+        )
+        if beat in {"hook", "rehook", "payoff"}:
+            motion_items.append(
+                {
+                    "scene_id": scene_id,
+                    "type": "punch-in" if beat in {"rehook", "payoff"} else "zoom-in",
+                    "start_scale": 1.0,
+                    "end_scale": 1.1 if beat in {"rehook", "payoff"} else 1.05,
+                    "focus_x": 0.5,
+                    "focus_y": 0.48,
+                }
+            )
+
+    rights["assets"] = asset_records + [
+        {
+            "id": "background-music",
+            "kind": "background_music",
+            "path": "assets/audio/background-music.wav",
+            "creator": "Whiteboard Shorts synthetic tone generator",
+            "permission_status": "owned",
+            "permission_reference": "project-generated",
+            "synthetic": True,
+            "vocals": False,
+            "usage_scope": "local_whiteboard_review",
+        }
+    ]
+    rights["news2shorts_source"] = {
+        "project": str(project_dir),
+        "rights_inherited": True,
+        "permission_statuses": permission_statuses,
+        "publication_ready": False,
+    }
+    postproduction["captions"] = {
+        "enabled": True,
+        "style": "viral-punch",
+        "items": caption_items,
+    }
+    postproduction["music"] = {
+        "enabled": True,
+        "mode": "synthetic_ambient",
+        "vocals": False,
+        "volume": 0.24,
+        "fade_in_seconds": 0.25,
+        "fade_out_seconds": 0.45,
+        "asset_path": "assets/audio/background-music.wav",
+        "segments": music_segments,
+        "rights": {
+            "permission_status": "owned",
+            "note": "Whiteboard renderer project-generated no-vocal music",
+        },
+    }
+    postproduction["motion"] = {"enabled": True, "items": motion_items}
+    whiteboard_project["status"] = "annotated"
+    whiteboard_project["updated_at"] = iso_now()
+    whiteboard_project["render_profile"]["audio"] = "background_music"
+    whiteboard_project["render_profile"]["audio_codec"] = "aac"
+    whiteboard_project["news2shorts_source"] = {
+        "project": str(project_dir),
+        "visual_mode": "whiteboard",
+        "prepared_at": iso_now(),
+        "publish_blocked": True,
+        "visible_review_badge": False,
+        "rights_review_owner": "user_before_publish",
+        "local_review_only": any(
+            status not in {"owned", "licensed", "permission_confirmed"}
+            for status in permission_statuses
+        ),
+    }
+    write_json(whiteboard_dir / "project.json", whiteboard_project)
+    write_json(whiteboard_dir / "rights-manifest.json", rights)
+    write_json(whiteboard_dir / "post-production.json", postproduction)
+    visual_sourcing = project.get("visual_sourcing")
+    visual_style = project.get("visual_style")
+    assert isinstance(visual_sourcing, dict) and isinstance(visual_style, dict)
+    visual_sourcing["mode"] = "whiteboard"
+    whiteboard_config = visual_sourcing.get("whiteboard")
+    if not isinstance(whiteboard_config, dict):
+        whiteboard_config = {}
+        visual_sourcing["whiteboard"] = whiteboard_config
+    whiteboard_config.update(
+        {
+            "enabled": True,
+            "renderer": "whiteboard-shorts",
+            "project_dir": str(whiteboard_dir.relative_to(project_dir)),
+            "source_rights_inherited": True,
+            "prepared_at": iso_now(),
+        }
+    )
+    visual_style["render_mode"] = "whiteboard"
+    project["updated_at"] = iso_now()
+    write_json(project_dir / "project.json", project)
+    print(
+        json.dumps(
+            {
+                "project_dir": str(project_dir),
+                "whiteboard_project": str(whiteboard_dir),
+                "scene_count": len(scenes),
+                "source_duration_seconds": total_seconds,
+                "rendered": False,
+                "review_required": True,
+                "publication_ready": False,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0
+
+
+def cmd_render_whiteboard(args: argparse.Namespace, project: dict) -> int:
+    if not args.draft:
+        fail("news2shorts whiteboard 옵션은 권리·장면 검토 전 clean final을 만들지 않습니다. --draft를 사용하세요.")
+    if not args.confirm_whiteboard_review:
+        fail("whiteboard 장면 이미지와 annotation을 확인한 뒤 --confirm-whiteboard-review가 필요합니다.")
+    project_dir = Path(args.project_dir).expanduser().resolve()
+    visual_sourcing = project.get("visual_sourcing")
+    if not isinstance(visual_sourcing, dict):
+        fail("project.json의 visual_sourcing을 확인하세요.")
+    whiteboard_config = visual_sourcing.get("whiteboard")
+    if not isinstance(whiteboard_config, dict) or whiteboard_config.get("enabled") is not True:
+        fail("먼저 prepare-whiteboard를 실행하세요.")
+    whiteboard_relative = args.whiteboard_project or str(
+        whiteboard_config.get("project_dir") or "whiteboard-project"
+    )
+    whiteboard_dir = resolve_project_file(project_dir, whiteboard_relative)
+    whiteboard_project = load_json(whiteboard_dir / "project.json")
+    if not isinstance(whiteboard_project, dict):
+        fail("whiteboard project.json을 확인하세요.")
+    approvals = whiteboard_project.get("approvals")
+    if not isinstance(approvals, dict):
+        fail("whiteboard 승인 구조가 없습니다.")
+    approvals["scene_plan_reviewed"] = True
+    approvals["images_reviewed"] = True
+    approvals["annotations_reviewed"] = True
+    whiteboard_project["updated_at"] = iso_now()
+    write_json(whiteboard_dir / "project.json", whiteboard_project)
+    validate_result = run_command(
+        [
+            sys.executable,
+            str(whiteboard_cli_path()),
+            "validate",
+            "--project-dir",
+            str(whiteboard_dir),
+            "--render-ready",
+        ]
+    )
+    render_command = [
+        sys.executable,
+        str(whiteboard_cli_path()),
+        "render",
+        "--project-dir",
+        str(whiteboard_dir),
+        "--all",
+        "--draft",
+        "--hide-review-label",
+    ]
+    if args.overwrite:
+        render_command.append("--overwrite")
+    render_result = run_command(render_command)
+    print(
+        json.dumps(
+            {
+                "visual_mode": "whiteboard",
+                "news_project": str(project_dir),
+                "whiteboard_project": str(whiteboard_dir),
+                "video": str(whiteboard_dir / "outputs" / "preview.mp4"),
+                "validate": json.loads(validate_result.stdout),
+                "renderer_output": render_result.stdout.strip(),
+                "draft": True,
+                "publication_ready": False,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0
+
+
 def cmd_render(args: argparse.Namespace) -> int:
     project_dir = Path(args.project_dir).expanduser().resolve()
     if not project_dir.is_dir():
         fail(f"프로젝트 디렉터리를 찾을 수 없습니다: {project_dir}")
+    project_preview = load_json(project_dir / "project.json")
+    if not isinstance(project_preview, dict):
+        fail("project.json의 최상위 값은 객체여야 합니다.")
+    configured_mode = str(
+        (project_preview.get("visual_sourcing") or {}).get("mode") or "standard"
+    ).strip()
+    requested_mode = args.visual_mode or configured_mode
+    if requested_mode not in VISUAL_MODES:
+        fail(f"지원하지 않는 visual mode입니다: {requested_mode}")
+    if args.visual_mode and requested_mode != configured_mode:
+        fail(
+            "렌더 visual mode는 project.json과 일치해야 합니다. "
+            "whiteboard는 prepare-whiteboard로 준비하세요."
+        )
+    if requested_mode == "whiteboard":
+        return cmd_render_whiteboard(args, project_preview)
     errors, warnings = validate_project(project_dir, final=not args.draft)
     if errors:
         fail("렌더 전 검증 실패:\n- " + "\n- ".join(errors))
@@ -6295,8 +9596,14 @@ def cmd_render(args: argparse.Namespace) -> int:
     scenes = storyboard["scenes"]
     delivery_mode = str(project.get("delivery_mode") or "scene-based").strip()
     continuous_flow = delivery_mode == CONTINUOUS_FLOW_MODE
+    visual_first = delivery_mode == VISUAL_FIRST_MODE
+    hybrid_source_audio = continuous_flow and any(
+        isinstance(scene, dict) and scene_uses_source_video_audio(scene)
+        for scene in scenes
+    )
+    effective_no_tts = args.no_tts or visual_first
     voice_selection: dict | None = None
-    if not args.no_tts and args.tts_provider == "typecast":
+    if not effective_no_tts and args.tts_provider == "typecast":
         try:
             voice_selection = select_typecast_voice(project, storyboard, args.typecast_voice)
         except News2ShortsError as exc:
@@ -6313,11 +9620,27 @@ def cmd_render(args: argparse.Namespace) -> int:
     if args.tts_provider == "typecast" and not 0.5 <= args.typecast_tempo <= 2.0:
         fail("--typecast-tempo는 0.5에서 2.0 사이여야 합니다.")
     needs_generated_tts = any(
-        str(scene.get("narration") or "").strip() and not str(scene.get("audio") or "").strip()
+        str(scene.get("narration") or "").strip()
+        and not str(scene.get("audio") or "").strip()
+        and not scene_uses_source_video_audio(scene)
         for scene in scenes
     )
     cta_config = project.get("cta_tail")
     cta_selection = select_cta_tail_variant(project, storyboard)
+    configured_mid_cta = mid_cta_config(project)
+    try:
+        project_version_for_mid_cta = int(project.get("version") or 1)
+        project_target_duration = float(project.get("target_duration_seconds") or 0.0)
+    except (TypeError, ValueError):
+        project_version_for_mid_cta = 1
+        project_target_duration = 0.0
+    mid_cta_may_need_generated_tts = (
+        project_version_for_mid_cta >= 17
+        and str(configured_mid_cta.get("mode") or "disabled") != "disabled"
+        and delivery_mode == CONTINUOUS_FLOW_MODE
+        and project_target_duration >= MID_CTA_MIN_BODY_SECONDS
+        and configured_mid_cta.get("voice_enabled") is True
+    )
     cta_needs_generated_tts = (
         isinstance(cta_config, dict)
         and cta_config.get("enabled") is True
@@ -6325,8 +9648,8 @@ def cmd_render(args: argparse.Namespace) -> int:
         and bool(str(cta_selection.get("narration") or "").strip())
     )
     if (
-        not args.no_tts
-        and (needs_generated_tts or cta_needs_generated_tts)
+        not effective_no_tts
+        and (needs_generated_tts or cta_needs_generated_tts or mid_cta_may_need_generated_tts)
         and args.tts_provider == "typecast"
     ):
         typecast_api_key()
@@ -6351,9 +9674,19 @@ def cmd_render(args: argparse.Namespace) -> int:
         )
 
     scene_reports: list[dict] = []
+    mid_cta_report: dict = {"enabled": False}
+    planned_mid_cta_selection: dict = {"enabled": False}
+    if continuous_flow and not hybrid_source_audio:
+        planned_mid_cta_selection = select_mid_cta(
+            project,
+            scenes,
+            estimated_continuous_flow_scene_reports(project, scenes),
+        )
     cta_report: dict = {"enabled": False}
     brand_intro_report: dict = {"enabled": False}
     editor_package_report: dict = {"enabled": False}
+    background_music_report: dict = {"enabled": False}
+    background_music_path: Path | None = None
     with tempfile.TemporaryDirectory(prefix=".news2shorts-", dir=project_dir) as temp_name:
         work_dir = Path(temp_name)
         scene_paths: list[Path] = []
@@ -6365,16 +9698,26 @@ def cmd_render(args: argparse.Namespace) -> int:
             timed_motion = int(project.get("version") or 1) >= 4
         except (TypeError, ValueError):
             timed_motion = False
-        continuous_audio_path: Path | None = None
+        continuous_audio_segments: list[dict] = []
+        continuous_group_audio_paths: list[Path] = []
         continuous_audio_duration = 0.0
         continuous_audio_source = ""
-        continuous_durations: list[float] = []
-        if continuous_flow:
-            continuous_audio_path, continuous_audio_duration, continuous_audio_source = (
-                continuous_flow_audio(
-                    scenes,
+        if continuous_flow and not hybrid_source_audio:
+            group_ranges = continuous_flow_audio_group_ranges(
+                len(scenes),
+                planned_mid_cta_selection,
+            )
+            for group_number, (group_start, group_end) in enumerate(group_ranges, start=1):
+                group_scenes = scenes[group_start:group_end]
+                output_stem = (
+                    "continuous-flow"
+                    if len(group_ranges) == 1
+                    else f"continuous-flow-mid-cta-part-{group_number}"
+                )
+                group_audio_path, group_audio_duration, group_audio_source = continuous_flow_audio(
+                    group_scenes,
                     work_dir,
-                    no_tts=args.no_tts,
+                    no_tts=effective_no_tts,
                     tts_provider=args.tts_provider,
                     voice=args.voice,
                     rate=args.rate,
@@ -6384,19 +9727,49 @@ def cmd_render(args: argparse.Namespace) -> int:
                         else TYPECAST_VOICE_ID
                     ),
                     typecast_tempo=args.typecast_tempo,
+                    output_stem=output_stem,
                 )
-            )
-            continuous_durations = continuous_flow_scene_durations(
-                scenes,
-                continuous_audio_duration,
-            )
+                continuous_group_audio_paths.append(group_audio_path)
+                continuous_audio_duration += group_audio_duration
+                if not continuous_audio_source:
+                    continuous_audio_source = group_audio_source
+                if effective_no_tts:
+                    group_durations = [
+                        max(
+                            CONTINUOUS_FLOW_PAYOFF_MIN_SECONDS
+                            if str(scene.get("beat") or "").strip() == "payoff"
+                            else CONTINUOUS_FLOW_MIN_SCENE_SECONDS,
+                            float(scene.get("duration") or 0.0),
+                        )
+                        for scene in group_scenes
+                    ]
+                else:
+                    group_durations = continuous_flow_scene_durations(
+                        group_scenes,
+                        group_audio_duration,
+                    )
+                group_cursor = 0.0
+                for duration in group_durations:
+                    continuous_audio_segments.append(
+                        {
+                            "path": group_audio_path,
+                            "start": group_cursor,
+                            "duration": duration,
+                            "source": group_audio_source,
+                        }
+                    )
+                    group_cursor += duration
         continuous_cursor = 0.0
+        scene_cursor = 0.0
         for index, scene in enumerate(scenes, start=1):
             frame = work_dir / f"scene-{index:02d}.png"
             video_value = str(scene.get("video") or "").strip()
             static_overlay: Path | None = None
             if video_value:
-                render_retention_overlay(scene, project, frame, draft=args.draft)
+                if scene_text_overlay_enabled(scene):
+                    render_retention_overlay(scene, project, frame, draft=args.draft)
+                else:
+                    render_source_video_overlay(scene, frame)
             elif template in RETENTION_TEMPLATES:
                 render_retention_visual(scene, project_dir, frame)
                 static_overlay = work_dir / f"scene-{index:02d}-overlay.png"
@@ -6406,25 +9779,42 @@ def cmd_render(args: argparse.Namespace) -> int:
             previous_text = str(scenes[index - 2].get("narration") or "").strip() if index > 1 else ""
             next_text = str(scenes[index].get("narration") or "").strip() if index < len(scenes) else ""
             requested = max(1.0, float(scene.get("duration") or 0.0))
-            if continuous_flow:
-                assert continuous_audio_path is not None
-                duration = continuous_durations[index - 1]
+            if continuous_flow and not hybrid_source_audio:
+                segment = continuous_audio_segments[index - 1]
+                duration = float(segment["duration"])
                 audio = work_dir / f"scene-{index:02d}-continuous.wav"
                 extract_audio_segment(
-                    continuous_audio_path,
+                    Path(segment["path"]),
                     audio,
-                    start=continuous_cursor,
+                    start=float(segment["start"]),
                     duration=duration,
                 )
                 measured_audio = duration
-                audio_source = f"{continuous_audio_source}-segment"
+                audio_source = f"{segment['source']}-segment"
+            elif scene_uses_source_video_audio(scene):
+                if not video_value:
+                    raise News2ShortsError(
+                        f"source-video audio_mode에는 video 자산이 필요합니다: {scene.get('id', index)}"
+                    )
+                video_path = resolve_project_file(project_dir, video_value)
+                start = max(0.0, float(scene.get("video_start") or 0.0))
+                audio = work_dir / f"scene-{index:02d}-source-video.wav"
+                extract_audio_segment(
+                    video_path,
+                    audio,
+                    start=start,
+                    duration=requested,
+                )
+                measured_audio = audio_duration(audio)
+                duration = requested
+                audio_source = SOURCE_VIDEO_AUDIO_MODE
             else:
                 audio, measured_audio, audio_source = scene_audio(
                     scene,
                     project_dir,
                     work_dir,
                     index,
-                    no_tts=args.no_tts,
+                    no_tts=effective_no_tts,
                     tts_provider=args.tts_provider,
                     voice=args.voice,
                     rate=args.rate,
@@ -6437,7 +9827,11 @@ def cmd_render(args: argparse.Namespace) -> int:
                     previous_text=previous_text,
                     next_text=next_text,
                 )
-                duration = max(requested, measured_audio + TYPECAST_SCENE_TAIL_SECONDS)
+                duration = (
+                    requested
+                    if visual_first
+                    else max(requested, measured_audio + TYPECAST_SCENE_TAIL_SECONDS)
+                )
             if duration > 90:
                 raise News2ShortsError(f"장면이 너무 깁니다: {scene.get('id', index)}: {duration:.1f}초")
             scene_path = work_dir / f"scene-{index:02d}.mp4"
@@ -6510,6 +9904,9 @@ def cmd_render(args: argparse.Namespace) -> int:
                     "requested_duration": requested,
                     "audio_duration": round(measured_audio, 3),
                     "audio_source": audio_source,
+                    "audio_mode": scene_audio_mode(scene),
+                    "render_text_overlay": scene_text_overlay_enabled(scene),
+                    "external_caption": scene_external_caption_enabled(scene),
                     "rendered_duration": round(duration, 3),
                     "visual_kind": visual_kind,
                     "image_fit": (
@@ -6542,10 +9939,13 @@ def cmd_render(args: argparse.Namespace) -> int:
                     "flow_cue_end": (
                         round(continuous_cursor + duration, 3) if continuous_flow else None
                     ),
+                    "timeline_start": round(scene_cursor, 3),
+                    "timeline_end": round(scene_cursor + duration, 3),
                 }
             )
             if continuous_flow:
                 continuous_cursor += duration
+            scene_cursor += duration
 
         timing_errors, timing_warnings = render_timing_issues(
             project,
@@ -6556,13 +9956,81 @@ def cmd_render(args: argparse.Namespace) -> int:
         if timing_errors:
             fail("Typecast 렌더 길이 검증 실패:\n- " + "\n- ".join(timing_errors))
 
+        if continuous_flow and not hybrid_source_audio:
+            mid_cta_selection = dict(planned_mid_cta_selection)
+            if mid_cta_selection.get("enabled") is True:
+                insert_after_index = int(mid_cta_selection["insert_after_scene_index"])
+                body_duration = float(scene_reports[-1].get("timeline_end") or 0.0)
+                boundary = float(
+                    scene_reports[insert_after_index - 1].get("timeline_end") or 0.0
+                )
+                mid_cta_selection.update(
+                    {
+                        "body_duration": round(body_duration, 3),
+                        "boundary_ratio": round(
+                            boundary / body_duration if body_duration else 0.0,
+                            4,
+                        ),
+                        "body_audio_strategy": "two-continuous-requests",
+                        "body_audio_group_count": 2,
+                        "boundary_preserves_complete_utterances": True,
+                    }
+                )
+        else:
+            mid_cta_selection = select_mid_cta(project, scenes, scene_reports)
+        mid_cta_path = work_dir / "mid-cta.mp4"
+        mid_cta_audio_path: Path | None = None
+        if mid_cta_selection.get("enabled") is True:
+            insert_after_index = int(mid_cta_selection["insert_after_scene_index"])
+            previous_mid_text = str(scenes[insert_after_index - 1].get("narration") or "").strip()
+            next_mid_text = (
+                str(scenes[insert_after_index].get("narration") or "").strip()
+                if insert_after_index < len(scenes)
+                else ""
+            )
+            mid_cta_report, mid_cta_audio_path = render_mid_cta(
+                mid_cta_selection,
+                work_dir,
+                mid_cta_path,
+                no_tts=effective_no_tts,
+                tts_provider=args.tts_provider,
+                voice=args.voice,
+                rate=args.rate,
+                typecast_voice_id=(
+                    str(voice_selection["voice_id"]) if voice_selection else TYPECAST_VOICE_ID
+                ),
+                typecast_voice_name=(
+                    str(voice_selection["voice_name"]) if voice_selection else TYPECAST_VOICE_NAME
+                ),
+                typecast_tempo=args.typecast_tempo,
+                previous_text=previous_mid_text,
+                next_text=next_mid_text,
+            )
+            mid_duration = float(mid_cta_report.get("duration") or 0.0)
+            mid_start = float(scene_reports[insert_after_index - 1].get("timeline_end") or 0.0)
+            mid_cta_report["timeline_start"] = round(mid_start, 3)
+            mid_cta_report["timeline_end"] = round(mid_start + mid_duration, 3)
+            scene_paths.insert(insert_after_index, mid_cta_path)
+            for report_item in scene_reports[insert_after_index:]:
+                report_item["timeline_start"] = round(
+                    float(report_item.get("timeline_start") or 0.0) + mid_duration,
+                    3,
+                )
+                report_item["timeline_end"] = round(
+                    float(report_item.get("timeline_end") or 0.0) + mid_duration,
+                    3,
+                )
+            cta_selection = brand_close_selection(mid_cta_report)
+        else:
+            mid_cta_report = mid_cta_selection
+
         cta_path = work_dir / "cta-tail.mp4"
         cta_report = render_cta_tail(
             project,
             cta_selection,
             work_dir,
             cta_path,
-            no_tts=args.no_tts,
+            no_tts=effective_no_tts,
             tts_provider=args.tts_provider,
             voice=args.voice,
             rate=args.rate,
@@ -6575,6 +10043,23 @@ def cmd_render(args: argparse.Namespace) -> int:
             typecast_tempo=args.typecast_tempo,
             previous_text=(str(scenes[-1].get("narration") or "").strip() if scenes else ""),
         )
+        try:
+            project_version = int(project.get("version") or 1)
+        except (TypeError, ValueError):
+            project_version = 1
+        if (
+            project_version >= 16
+            and cta_report.get("enabled") is True
+            and float(cta_report.get("duration") or 0.0) > DEFAULT_CTA_TAIL_DURATION + 0.01
+        ):
+            message = (
+                "version 16 CTA 실제 길이가 2초를 넘습니다: "
+                f"{float(cta_report.get('duration') or 0.0):.2f}/{DEFAULT_CTA_TAIL_DURATION:.2f}초"
+            )
+            if args.draft:
+                warnings.append(message)
+            else:
+                fail(message)
         cta_audio_path = next(
             (
                 candidate
@@ -6614,12 +10099,24 @@ def cmd_render(args: argparse.Namespace) -> int:
             ]
         )
         news_scenes_body = segmented_news_body
-        if continuous_flow:
-            assert continuous_audio_path is not None
+        if continuous_flow and not hybrid_source_audio and not effective_no_tts:
+            body_audio_parts = list(continuous_group_audio_paths)
+            if mid_cta_report.get("enabled") is True:
+                if len(body_audio_parts) != 2 or mid_cta_audio_path is None:
+                    raise News2ShortsError(
+                        "중간 CTA 렌더에는 앞 본문, CTA, 뒤 본문의 완전한 오디오가 필요합니다."
+                    )
+                body_audio_parts.insert(1, mid_cta_audio_path)
+            continuous_body_audio = work_dir / "continuous-body-with-cta.wav"
+            concatenate_audio_files(
+                body_audio_parts,
+                continuous_body_audio,
+                work_dir / "continuous-body-audio-concat.txt",
+            )
             news_scenes_body = work_dir / "news-scenes-continuous.mp4"
             mux_continuous_audio(
                 segmented_news_body,
-                continuous_audio_path,
+                continuous_body_audio,
                 news_scenes_body,
             )
         news_body = news_scenes_body
@@ -6630,6 +10127,30 @@ def cmd_render(args: argparse.Namespace) -> int:
                 news_body,
                 work_dir / "news-body-concat.txt",
             )
+        if visual_first:
+            body_info = probe_video(news_body)
+            generated_music = work_dir / "background-music.wav"
+            create_news_pulse_audio(generated_music, float(body_info["duration"]))
+            music_body = work_dir / "news-body-with-music.mp4"
+            mux_continuous_audio(news_body, generated_music, music_body)
+            news_body = music_body
+            background_music_path = resolve_project_file(
+                project_dir,
+                VISUAL_FIRST_AUDIO_PATH,
+                must_exist=False,
+            )
+            background_music_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(generated_music, background_music_path)
+            record_generated_background_music(manifest, float(body_info["duration"]))
+            write_json(project_dir / "rights-manifest.json", manifest)
+            background_music_report = {
+                "enabled": True,
+                "mode": "renderer-generated",
+                "profile": VISUAL_FIRST_AUDIO_PROFILE,
+                "vocals": False,
+                "path": VISUAL_FIRST_AUDIO_PATH,
+                "duration": round(float(body_info["duration"]), 3),
+            }
         brand_intro_report = compose_brand_intro(project, news_body, output)
         editor_package_report = create_editor_package(
             project_dir,
@@ -6639,9 +10160,13 @@ def cmd_render(args: argparse.Namespace) -> int:
             output_name,
             work_dir,
             editor_scenes,
+            mid_cta_path if mid_cta_report.get("enabled") is True else None,
+            mid_cta_audio_path,
+            mid_cta_report,
             cta_path if cta_report.get("enabled") is True else None,
             cta_audio_path,
             cta_report,
+            background_music_path,
             overwrite=args.overwrite,
         )
 
@@ -6655,19 +10180,19 @@ def cmd_render(args: argparse.Namespace) -> int:
         overwrite=args.overwrite,
     )
     report = {
-        "version": 3,
+        "version": 5,
         "rendered_at": iso_now(),
         "draft": args.draft,
         "output": output.relative_to(project_dir).as_posix(),
         "voice": None
-        if args.no_tts
+        if effective_no_tts
         else (
             voice_selection["voice_id"]
             if args.tts_provider == "typecast" and voice_selection
             else args.voice
         ),
         "voice_name": None
-        if args.no_tts
+        if effective_no_tts
         else (
             voice_selection["voice_name"]
             if args.tts_provider == "typecast" and voice_selection
@@ -6687,15 +10212,78 @@ def cmd_render(args: argparse.Namespace) -> int:
             "distribution_basis": voice_selection.get("distribution_basis"),
             "distribution_bucket": voice_selection.get("distribution_bucket"),
         },
-        "tts_provider": None if args.no_tts else args.tts_provider,
-        "tts_model": TYPECAST_MODEL if not args.no_tts and args.tts_provider == "typecast" else None,
+        "tts_provider": None if effective_no_tts else args.tts_provider,
+        "tts_model": TYPECAST_MODEL if not effective_no_tts and args.tts_provider == "typecast" else None,
+        "tts_outer_silence_trim": None
+        if effective_no_tts or args.tts_provider != "typecast"
+        else {
+            "enabled": True,
+            "leading_keep_seconds": TYPECAST_LEADING_SILENCE_KEEP_SECONDS,
+            "trailing_keep_seconds": TYPECAST_TRAILING_SILENCE_KEEP_SECONDS,
+            "threshold_db": TYPECAST_SILENCE_THRESHOLD_DB,
+            "internal_pauses_preserved": True,
+        },
         "delivery_mode": delivery_mode,
+        "narration_style": narration_style_config(project),
         "continuous_flow": {
-            "enabled": continuous_flow,
-            "body_tts_requests": 1 if continuous_flow and not args.no_tts else 0,
-            "audio_source": continuous_audio_source if continuous_flow else None,
+            "enabled": (
+                continuous_flow
+                and not hybrid_source_audio
+                and mid_cta_report.get("enabled") is not True
+            ),
+            "hybrid_source_audio": hybrid_source_audio,
+            "mid_cta_segmented": bool(
+                continuous_flow
+                and not hybrid_source_audio
+                and mid_cta_report.get("enabled") is True
+            ),
+            "mid_cta_two_part": bool(
+                continuous_flow
+                and not hybrid_source_audio
+                and mid_cta_report.get("enabled") is True
+            ),
+            "boundary_preserves_complete_utterances": bool(
+                mid_cta_report.get("boundary_preserves_complete_utterances") is True
+            ),
+            "body_tts_requests": (
+                sum(
+                    1
+                    for scene in scenes
+                    if isinstance(scene, dict)
+                    and not scene_uses_source_video_audio(scene)
+                    and str(scene.get("narration") or "").strip()
+                    and not str(scene.get("audio") or "").strip()
+                )
+                if hybrid_source_audio and not effective_no_tts
+                else 2
+                if continuous_flow
+                and mid_cta_report.get("enabled") is True
+                and not effective_no_tts
+                else 1 if continuous_flow and not effective_no_tts else 0
+            ),
+            "audio_source": (
+                "scene-aligned-hybrid"
+                if hybrid_source_audio
+                else f"{continuous_audio_source}-two-part-safe-boundary"
+                if continuous_flow and mid_cta_report.get("enabled") is True
+                else continuous_audio_source if continuous_flow else None
+            ),
+            "timing_strategy": (
+                "scene-aligned"
+                if hybrid_source_audio
+                else "mid-cta-two-part-continuous"
+                if continuous_flow and mid_cta_report.get("enabled") is True
+                else
+                "storyboard-requested"
+                if continuous_flow and effective_no_tts
+                else "narration-weighted"
+                if continuous_flow
+                else None
+            ),
             "audio_duration": (
-                round(continuous_audio_duration, 3) if continuous_flow else None
+                round(scene_cursor, 3)
+                if hybrid_source_audio
+                else round(continuous_audio_duration, 3) if continuous_flow else None
             ),
         },
         "visual_style": visual_style_config(project).get("template"),
@@ -6717,6 +10305,9 @@ def cmd_render(args: argparse.Namespace) -> int:
         },
         "scene_transition": "cut",
         "brand_intro": brand_intro_report,
+        "audio_bed": background_music_report,
+        "retention_timing": retention_timing_report(project, scene_reports),
+        "mid_cta": mid_cta_report,
         "cta_tail": cta_report,
         "editor_package": editor_package_report,
         "scenes": scene_reports,
@@ -6820,6 +10411,46 @@ def validate_editor_package(
             captions_path.read_text(encoding="utf-8")
         except UnicodeError:
             errors.append("captions.srt가 UTF-8 형식이 아닙니다.")
+    mid_cta_value = str(package_report.get("mid_cta") or "").strip()
+    if mid_cta_value:
+        if not (package_dir / "scenes" / "mid-cta.mp4").is_file():
+            errors.append("편집 호환 패키지에 mid-cta.mp4가 없습니다.")
+        if not (package_dir / "audio" / "mid-cta.wav").is_file():
+            errors.append("편집 호환 패키지에 mid-cta.wav가 없습니다.")
+        timeline_path = package_dir / "timeline.csv"
+        if timeline_path.is_file():
+            with timeline_path.open("r", encoding="utf-8", newline="") as handle:
+                rows = list(csv.DictReader(handle))
+            if not any(row.get("kind") == "mid-cta" for row in rows):
+                errors.append("편집 호환 패키지 timeline.csv에 mid-cta 행이 없습니다.")
+    return errors
+
+
+def validate_mid_cta_audio_boundary(render_report: dict) -> list[str]:
+    mid_report = render_report.get("mid_cta")
+    if not isinstance(mid_report, dict) or mid_report.get("enabled") is not True:
+        return []
+    if str(render_report.get("delivery_mode") or "") != CONTINUOUS_FLOW_MODE:
+        return []
+    if not str(render_report.get("tts_provider") or "").strip():
+        return []
+
+    errors: list[str] = []
+    continuous_report = render_report.get("continuous_flow")
+    if not isinstance(continuous_report, dict):
+        return ["중간 CTA 렌더 보고서에 continuous_flow 오디오 기록이 없습니다."]
+    try:
+        body_tts_requests = int(continuous_report.get("body_tts_requests") or 0)
+    except (TypeError, ValueError):
+        body_tts_requests = 0
+    if body_tts_requests != 2:
+        errors.append("중간 CTA 본문은 앞뒤 두 번의 완전한 TTS 요청으로 생성해야 합니다.")
+    if continuous_report.get("mid_cta_two_part") is not True:
+        errors.append("중간 CTA 본문에 two-part 오디오 기록이 없습니다.")
+    if continuous_report.get("boundary_preserves_complete_utterances") is not True:
+        errors.append("중간 CTA 경계가 완전한 발화를 보존하지 않았습니다.")
+    if mid_report.get("boundary_preserves_complete_utterances") is not True:
+        errors.append("중간 CTA 자체 보고서에 안전한 발화 경계 기록이 없습니다.")
     return errors
 
 
@@ -6867,6 +10498,50 @@ def cmd_validate(args: argparse.Namespace) -> int:
                 project_version = int(project.get("version") or 1)
             except (TypeError, ValueError):
                 project_version = 1
+            if project_version >= 16:
+                retention_report = render_report.get("retention_timing")
+                if not isinstance(retention_report, dict) or retention_report.get("passed") is not True:
+                    errors.append("version 16 렌더 보고서의 답변·조건 타이밍 검증이 통과하지 않았습니다.")
+                if str(project.get("delivery_mode") or "") == VISUAL_FIRST_MODE:
+                    audio_bed_report = render_report.get("audio_bed")
+                    if not isinstance(audio_bed_report, dict) or audio_bed_report.get("enabled") is not True:
+                        errors.append("visual-first 렌더 보고서에 생성 BGM 기록이 없습니다.")
+                    else:
+                        if str(audio_bed_report.get("profile") or "") != VISUAL_FIRST_AUDIO_PROFILE:
+                            errors.append("visual-first 렌더 보고서의 BGM profile이 다릅니다.")
+                        if audio_bed_report.get("vocals") is not False:
+                            errors.append("visual-first 렌더 보고서의 BGM은 무보컬이어야 합니다.")
+            mid_cta_rendered = False
+            if project_version >= 17:
+                configured_mid_cta = mid_cta_config(project)
+                mid_mode = str(configured_mid_cta.get("mode") or "disabled")
+                mid_report = render_report.get("mid_cta")
+                if not isinstance(mid_report, dict):
+                    (errors if args.final else warnings).append(
+                        "version 17 렌더 보고서에 mid_cta 기록이 없습니다. 다시 렌더하세요."
+                    )
+                else:
+                    mid_cta_rendered = mid_report.get("enabled") is True
+                    if mid_mode == "disabled" and mid_cta_rendered:
+                        errors.append("사용자가 제외한 중간 CTA가 렌더됐습니다.")
+                    if mid_mode == "enabled" and args.final and not mid_cta_rendered:
+                        errors.append("사용자가 포함한 중간 CTA가 최종 렌더에 없습니다.")
+                    if mid_cta_rendered:
+                        errors.extend(validate_mid_cta_audio_boundary(render_report))
+                        try:
+                            mid_duration = float(mid_report.get("duration") or 0.0)
+                        except (TypeError, ValueError):
+                            mid_duration = 0.0
+                        if not MID_CTA_MIN_DURATION <= mid_duration <= MID_CTA_MAX_DURATION:
+                            errors.append("중간 CTA 실제 길이는 1.5-2.0초여야 합니다.")
+                        if str(mid_report.get("ui_target_profile") or "") != MID_CTA_UI_TARGET_PROFILE:
+                            errors.append("중간 CTA의 YouTube Shorts UI 목표 프로필이 없습니다.")
+                        if mid_report.get("fake_button_rendered") is not False:
+                            errors.append("중간 CTA는 클릭되지 않는 가짜 버튼을 그릴 수 없습니다.")
+                        if mid_report.get("srt_generated") is not False:
+                            errors.append("중간 CTA는 별도 SRT 자막을 만들 수 없습니다.")
+                        if not str(mid_report.get("insert_after_scene_id") or "").strip():
+                            errors.append("중간 CTA 삽입 장면 기록이 없습니다.")
             if args.final and project_version >= 4:
                 cta_report = render_report.get("cta_tail")
                 if not isinstance(cta_report, dict) or cta_report.get("enabled") is not True:
@@ -6881,14 +10556,30 @@ def cmd_validate(args: argparse.Namespace) -> int:
                             "최종 렌더의 CTA 테일 길이가 "
                             f"{MIN_CTA_TAIL_DURATION:.1f}-{MAX_CTA_TAIL_DURATION:.1f}초가 아닙니다."
                         )
+                    if project_version >= 16 and cta_duration > DEFAULT_CTA_TAIL_DURATION + 0.01:
+                        errors.append("version 16 최종 CTA 테일은 2초 이하여야 합니다.")
+                    if (
+                        project_version >= 16
+                        and str(project.get("delivery_mode") or "") == VISUAL_FIRST_MODE
+                        and cta_report.get("voice_enabled") is not False
+                    ):
+                        errors.append("visual-first 최종 CTA는 무음이어야 합니다.")
                     if project_version >= 8:
                         cta_variant = str(cta_report.get("variant") or "")
-                        if cta_variant not in CTA_TAIL_VARIANTS:
-                            errors.append("최종 렌더의 CTA variant가 subscribe 또는 comment가 아닙니다.")
-                        if str(cta_report.get("selection_strategy") or "") != CTA_TAIL_SELECTION_STRATEGY:
-                            errors.append("최종 렌더의 CTA 자동 선택 전략 기록이 없습니다.")
-                        if project.get("sensitive_topic") is True and cta_variant != "subscribe":
-                            errors.append("민감 뉴스의 최종 CTA는 subscribe여야 합니다.")
+                        if project_version >= 17 and mid_cta_rendered:
+                            if cta_variant != "brand-close":
+                                errors.append("중간 CTA가 있으면 최종 CTA는 brand-close여야 합니다.")
+                            if cta_duration > BRAND_CLOSE_DURATION + 0.01:
+                                errors.append("중간 CTA 이후 브랜드 마감은 0.8초 이하여야 합니다.")
+                            if cta_report.get("voice_enabled") is not False:
+                                errors.append("중간 CTA 이후 브랜드 마감은 무음이어야 합니다.")
+                        else:
+                            if cta_variant not in CTA_TAIL_VARIANTS:
+                                errors.append("최종 렌더의 CTA variant가 subscribe 또는 comment가 아닙니다.")
+                            if str(cta_report.get("selection_strategy") or "") != CTA_TAIL_SELECTION_STRATEGY:
+                                errors.append("최종 렌더의 CTA 자동 선택 전략 기록이 없습니다.")
+                            if project.get("sensitive_topic") is True and cta_variant != "subscribe":
+                                errors.append("민감 뉴스의 최종 CTA는 subscribe여야 합니다.")
                         if cta_variant == "comment":
                             if "댓글" not in str(cta_report.get("prompt") or ""):
                                 errors.append("댓글형 CTA 화면에 댓글 행동이 표시되지 않았습니다.")
@@ -6926,19 +10617,30 @@ def cmd_validate(args: argparse.Namespace) -> int:
                 if not isinstance(brand_report, dict) or brand_report.get("enabled") is not True:
                     errors.append("최종 렌더 보고서에 공통 인트로 적용 기록이 없습니다.")
                 else:
+                    expected_brand_mode = str(
+                        brand_intro_config(project).get("mode") or BRAND_MODE_LEGACY_FULL
+                    ).strip()
+                    if str(brand_report.get("mode") or BRAND_MODE_LEGACY_FULL) != expected_brand_mode:
+                        errors.append("최종 렌더 보고서의 브랜드 모드가 프로젝트 설정과 다릅니다.")
                     expected_brand_asset = str(
                         brand_intro_config(project).get("asset") or BRAND_INTRO_ASSET_ID
                     ).strip()
                     if str(brand_report.get("asset") or "") != expected_brand_asset:
                         errors.append("최종 렌더 보고서의 공통 인트로 자산이 프로젝트 설정과 다릅니다.")
-                    if str(brand_report.get("transition") or "") not in ALLOWED_BRAND_INTRO_TRANSITIONS:
-                        errors.append("최종 렌더 보고서의 인트로 전환 효과가 지원 목록과 다릅니다.")
-                    try:
-                        transition_duration = float(brand_report.get("transition_duration") or 0.0)
-                    except (TypeError, ValueError):
-                        transition_duration = 0.0
-                    if not MIN_BRAND_INTRO_TRANSITION_DURATION <= transition_duration <= MAX_BRAND_INTRO_TRANSITION_DURATION:
-                        errors.append("최종 렌더 보고서의 인트로 전환 길이가 허용 범위와 다릅니다.")
+                    if expected_brand_mode == BRAND_MODE_CORNER_LOGO:
+                        if float(brand_report.get("lead_in_seconds") or 0.0) != 0.0:
+                            errors.append("corner-logo 최종 렌더는 브랜드 선행 시간이 없어야 합니다.")
+                        if str(brand_report.get("position") or "") != "top-left":
+                            errors.append("corner-logo 최종 렌더 위치는 top-left여야 합니다.")
+                    else:
+                        if str(brand_report.get("transition") or "") not in ALLOWED_BRAND_INTRO_TRANSITIONS:
+                            errors.append("최종 렌더 보고서의 인트로 전환 효과가 지원 목록과 다릅니다.")
+                        try:
+                            transition_duration = float(brand_report.get("transition_duration") or 0.0)
+                        except (TypeError, ValueError):
+                            transition_duration = 0.0
+                        if not MIN_BRAND_INTRO_TRANSITION_DURATION <= transition_duration <= MAX_BRAND_INTRO_TRANSITION_DURATION:
+                            errors.append("최종 렌더 보고서의 인트로 전환 길이가 허용 범위와 다릅니다.")
     videos: list[dict] = []
     for name in ("preview.mp4", "short.mp4"):
         path = project_dir / name
@@ -6974,8 +10676,78 @@ def cmd_validate(args: argparse.Namespace) -> int:
 
 def upload_package_markdown(publish: dict) -> str:
     settings = publish.get("upload_settings")
+    errors: list[str] = []
     if not isinstance(settings, dict):
-        settings = {}
+        raise News2ShortsError("YouTube 업로드 정보를 만들 수 없습니다: upload_settings가 없습니다.")
+
+    tags = publish.get("tags")
+    raw_title = str(publish.get("title") or "").strip()
+    raw_description = str(publish.get("description") or "").strip()
+    pinned_comment = str(publish.get("pinned_comment") or "").strip()
+    source_lines = publish.get("source_lines")
+    if not raw_title:
+        errors.append("제목")
+    if not raw_description:
+        errors.append("설명")
+    if not pinned_comment:
+        errors.append("고정 댓글")
+    if not isinstance(tags, list) or not any(
+        isinstance(tag, str) and tag.strip() for tag in tags
+    ):
+        errors.append("태그")
+    if not isinstance(source_lines, list) or not any(
+        isinstance(line, str) and line.strip() for line in source_lines
+    ):
+        errors.append("출처 문구")
+
+    required_text_settings = {
+        "thumbnail_hook": "썸네일 훅",
+        "thumbnail_subhook": "썸네일 보조 문구",
+        "thumbnail_badge": "썸네일 긴장 배지",
+        "thumbnail_style": "썸네일 구성",
+        "thumbnail_note": "썸네일 안내",
+        "playlist": "재생목록",
+        "category": "카테고리",
+        "video_language": "영상 언어",
+    }
+    for field, label in required_text_settings.items():
+        if not str(settings.get(field) or "").strip():
+            errors.append(label)
+
+    thumbnail_method = str(settings.get("thumbnail_method") or "").strip()
+    thumbnail_file = str(settings.get("thumbnail_file") or "").strip()
+    thumbnail_status = str(settings.get("thumbnail_status") or "").strip()
+    if thumbnail_method not in {"video_frame", "file_upload"}:
+        errors.append("썸네일 방식")
+    if thumbnail_method == "file_upload" and not thumbnail_file:
+        if thumbnail_status != "blocked_rights":
+            errors.append("썸네일 파일 또는 blocked_rights 상태")
+
+    audience = str(settings.get("audience") or "").strip()
+    altered_content = str(settings.get("altered_content") or "").strip()
+    age_restriction = str(settings.get("age_restriction") or "").strip()
+    visibility = str(settings.get("visibility") or "").strip()
+    schedule_at = str(settings.get("schedule_at") or "").strip()
+    if audience not in {"made_for_kids", "not_made_for_kids"}:
+        errors.append("시청자층")
+    if altered_content not in {"yes", "no"}:
+        errors.append("변경·합성 콘텐츠 공개 결정")
+    if age_restriction not in {"none", "18_plus"}:
+        errors.append("연령 제한 결정")
+    if visibility not in {"private", "unlisted", "public", "scheduled"}:
+        errors.append("공개 상태")
+    if visibility == "scheduled" and not schedule_at:
+        errors.append("예약 공개 시각")
+    if not isinstance(settings.get("paid_promotion"), bool):
+        errors.append("유료 프로모션 결정")
+    if not isinstance(settings.get("allow_comments"), bool):
+        errors.append("댓글 허용 결정")
+
+    if errors:
+        raise News2ShortsError(
+            "YouTube 업로드 정보를 만들 수 없습니다. 임의의 '미작성' 대신 먼저 채우세요: "
+            + ", ".join(dict.fromkeys(errors))
+        )
 
     audience_labels = {
         "made_for_kids": "예, 아동용입니다",
@@ -6985,8 +10757,8 @@ def upload_package_markdown(publish: dict) -> str:
         "video_frame": "동영상에서 선택",
         "file_upload": "파일 업로드",
     }
-    altered_labels = {"yes": "예", "no": "아니요", "review_required": "검토 필요"}
-    age_labels = {"none": "없음", "18_plus": "만 18세 이상", "review_required": "검토 필요"}
+    altered_labels = {"yes": "예", "no": "아니요"}
+    age_labels = {"none": "없음", "18_plus": "만 18세 이상"}
     visibility_labels = {
         "private": "비공개",
         "unlisted": "일부 공개",
@@ -6994,34 +10766,30 @@ def upload_package_markdown(publish: dict) -> str:
         "scheduled": "예약 공개",
     }
 
-    tags = publish.get("tags")
-    raw_title = str(publish.get("title") or "").strip()
-    title = title_with_hashtags(raw_title, tags) or "미작성"
-    description = public_upload_description(publish.get("description")) or "미작성"
-    pinned_comment = str(publish.get("pinned_comment") or "").strip() or "미작성"
-    tag_text = (
-        ", ".join(tag.strip() for tag in tags if isinstance(tag, str) and tag.strip())
-        if isinstance(tags, list)
-        else ""
+    title = title_with_hashtags(raw_title, tags)
+    description = deduplicated_upload_description(raw_title, raw_description)
+    if not title or not description:
+        raise News2ShortsError(
+            "YouTube 업로드 정보를 만들 수 없습니다. 제목·설명 중복 제거 후 공개 문구가 비었습니다."
+        )
+    tag_text = ", ".join(
+        hashtag
+        for hashtag in (tag_to_title_hashtag(tag) for tag in tags)
+        if hashtag
     )
-    if not tag_text:
-        tag_text = "미작성"
-
-    thumbnail_method = str(settings.get("thumbnail_method") or "video_frame")
-    thumbnail_file = str(settings.get("thumbnail_file") or "").strip()
-    thumbnail_note = str(settings.get("thumbnail_note") or "").strip() or "미작성"
-    thumbnail_hook = str(settings.get("thumbnail_hook") or "").strip() or "미작성"
-    thumbnail_subhook = str(settings.get("thumbnail_subhook") or "").strip() or "미작성"
-    thumbnail_badge = str(settings.get("thumbnail_badge") or "").strip() or "미작성"
-    thumbnail_style = str(settings.get("thumbnail_style") or "").strip() or "미작성"
-    playlist = str(settings.get("playlist") or "").strip() or "선택 안 함"
-    audience = str(settings.get("audience") or "not_made_for_kids")
-    altered_content = str(settings.get("altered_content") or "review_required")
-    age_restriction = str(settings.get("age_restriction") or "review_required")
-    visibility = str(settings.get("visibility") or "private")
-    schedule_at = str(settings.get("schedule_at") or "").strip()
-    paid_promotion = settings.get("paid_promotion")
-    allow_comments = settings.get("allow_comments")
+    thumbnail_file_display = (
+        thumbnail_file
+        if thumbnail_file
+        else "생성 차단: 권리 승인 이미지 필요"
+    )
+    thumbnail_note = str(settings["thumbnail_note"]).strip()
+    thumbnail_hook = str(settings["thumbnail_hook"]).strip()
+    thumbnail_subhook = str(settings["thumbnail_subhook"]).strip()
+    thumbnail_badge = str(settings["thumbnail_badge"]).strip()
+    thumbnail_style = str(settings["thumbnail_style"]).strip()
+    playlist = str(settings["playlist"]).strip()
+    paid_promotion = settings["paid_promotion"]
+    allow_comments = settings["allow_comments"]
 
     lines = [
         "## YouTube 업로드 정보",
@@ -7036,32 +10804,26 @@ def upload_package_markdown(publish: dict) -> str:
         tag_text,
         "",
         "### 세부 설정",
-        f"- 썸네일 방식: {thumbnail_labels.get(thumbnail_method, thumbnail_method or '미작성')}",
-        f"- 썸네일 파일: {thumbnail_file or '해당 없음'}",
+        f"- 썸네일 방식: {thumbnail_labels[thumbnail_method]}",
+        f"- 썸네일 파일: {thumbnail_file_display}",
         f"- 썸네일 훅: {thumbnail_hook}",
         f"- 썸네일 보조 문구: {thumbnail_subhook}",
         f"- 썸네일 긴장 배지: {thumbnail_badge}",
         f"- 썸네일 구성: {thumbnail_style}",
         f"- 썸네일 안내: {thumbnail_note}",
         f"- 재생목록: {playlist}",
-        f"- 시청자층: {audience_labels.get(audience, audience or '미작성')}",
-        f"- 카테고리: {str(settings.get('category') or '').strip() or '미작성'}",
-        f"- 영상 언어: {str(settings.get('video_language') or '').strip() or '미작성'}",
-        f"- 변경·합성 콘텐츠 공개: {altered_labels.get(altered_content, altered_content or '미작성')}",
-        f"- 유료 프로모션: {'예' if paid_promotion is True else '아니요' if paid_promotion is False else '검토 필요'}",
-        f"- 연령 제한: {age_labels.get(age_restriction, age_restriction or '미작성')}",
-        f"- 댓글 허용: {'예' if allow_comments is True else '아니요' if allow_comments is False else '검토 필요'}",
-        f"- 공개 상태: {visibility_labels.get(visibility, visibility or '미작성')}",
+        f"- 시청자층: {audience_labels[audience]}",
+        f"- 카테고리: {str(settings['category']).strip()}",
+        f"- 영상 언어: {str(settings['video_language']).strip()}",
+        f"- 변경·합성 콘텐츠 공개: {altered_labels[altered_content]}",
+        f"- 유료 프로모션: {'예' if paid_promotion else '아니요'}",
+        f"- 연령 제한: {age_labels[age_restriction]}",
+        f"- 댓글 허용: {'예' if allow_comments else '아니요'}",
+        f"- 공개 상태: {visibility_labels[visibility]}",
     ]
-    if visibility == "scheduled" or schedule_at:
-        lines.append(f"- 예약 공개 시각: {schedule_at or '미작성'}")
-    lines.extend(
-        [
-            "",
-            "### 고정 댓글",
-            pinned_comment,
-        ]
-    )
+    if visibility == "scheduled":
+        lines.append(f"- 예약 공개 시각: {schedule_at}")
+    lines.extend(["", "### 고정 댓글", pinned_comment])
     return "\n".join(lines)
 
 
@@ -7094,11 +10856,27 @@ def build_parser() -> argparse.ArgumentParser:
     discover.add_argument("--query", action="append", help="검색어입니다. 여러 번 지정할 수 있습니다.")
     discover.add_argument("--hours", type=int, default=30, help="현재부터 조회할 시간 범위입니다.")
     discover.add_argument("--limit", type=int, default=30, help="검색어별 기사 수입니다.")
-    discover.add_argument("--candidates", type=int, default=10, help="출력할 후보 수입니다.")
+    discover.add_argument(
+        "--candidates",
+        type=int,
+        choices=[DISCOVERY_CANDIDATE_COUNT],
+        default=DISCOVERY_CANDIDATE_COUNT,
+        help="출력할 후보 수입니다. 검증된 10개로 고정됩니다.",
+    )
     discover.add_argument("--skip-trends", action="store_true", help="검색어 트렌드 재검증을 생략합니다.")
+    discover.add_argument(
+        "--hot-real-news",
+        action="store_true",
+        help="최근 24시간, 최근 6시간 내 서로 다른 출처 2곳 이상인 시민 영향 뉴스를 우선합니다.",
+    )
     discover.add_argument(
         "--community-signals",
         help="공개 커뮤니티에서 읽기 전용으로 확인한 최소 메타데이터 JSON 경로입니다.",
+    )
+    discover.add_argument(
+        "--project-history-root",
+        default=DEFAULT_PROJECT_HISTORY_ROOT,
+        help="이미 다룬 뉴스 주제를 제외할 기존 projects 루트입니다. 기본값은 ./projects입니다.",
     )
     discover.add_argument("--output", help="결과 JSON 경로입니다.")
     discover.set_defaults(handler=cmd_discover)
@@ -7107,8 +10885,45 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--title", required=True, help="뉴스 주제 또는 영상 제목입니다.")
     init.add_argument("--source-url", default="", help="입력 뉴스 URL입니다.")
     init.add_argument("--project-dir", help="프로젝트 디렉터리입니다.")
-    init.add_argument("--duration", type=int, default=30, help="목표 영상 길이입니다.")
+    init.add_argument(
+        "--duration",
+        type=int,
+        help="목표 영상 길이입니다. 기본값은 continuous-flow 20초, visual-first 12초입니다.",
+    )
     init.add_argument("--sensitive", action="store_true", help="민감 뉴스 검증 규칙을 적용합니다.")
+    init.add_argument(
+        "--delivery-mode",
+        choices=tuple(sorted(DELIVERY_MODES)),
+        default=CONTINUOUS_FLOW_MODE,
+        help="continuous-flow 내레이션형 또는 visual-first 화면·BGM형 제작 모드입니다.",
+    )
+    init.add_argument(
+        "--narration-style",
+        choices=tuple(sorted(NARRATION_STYLES)),
+        default=NARRATION_STYLE_STANDARD,
+        help="기존 standard 또는 친구 설명형 cc-helper-conversational 내레이션 말투를 기록합니다.",
+    )
+    init.add_argument(
+        "--visual-mode",
+        choices=tuple(sorted(VISUAL_MODES)),
+        default="standard",
+        help="standard, hot-real-news 또는 whiteboard 시각 제작 모드를 기록합니다.",
+    )
+    init.add_argument(
+        "--international-source-country",
+        default="",
+        help="한국 시민 영향이 있는 국제 실제사건의 ISO 2자리 현장 국가 코드입니다.",
+    )
+    init.add_argument(
+        "--international-source-locale",
+        default="",
+        help="국제 실제사건 원본 시각의 로케일입니다. 예: ne-NP",
+    )
+    init.add_argument(
+        "--international-citizen-stake",
+        default="",
+        help="국제 실제사건이 한국 시민의 안전·권리에 미치는 직접 영향입니다.",
+    )
     init.add_argument(
         "--style",
         "--format",
@@ -7140,6 +10955,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="issue-tension",
         help="시민 관점의 질문으로 시작해 사실을 왜곡하지 않고 호기심을 여는 후크 유형입니다.",
     )
+    init.add_argument(
+        "--mid-cta-mode",
+        choices=tuple(sorted(MID_CTA_MODES)),
+        default="auto",
+        help="중간 구독 CTA를 자동 선택, 강제 포함 또는 제외합니다.",
+    )
     init.set_defaults(handler=cmd_init)
 
     optimize_images = subparsers.add_parser(
@@ -7150,6 +10971,109 @@ def build_parser() -> argparse.ArgumentParser:
     optimize_images.add_argument("--max-width", type=int, help="최대 이미지 너비입니다.")
     optimize_images.add_argument("--max-height", type=int, help="최대 이미지 높이입니다.")
     optimize_images.set_defaults(handler=cmd_optimize_images)
+
+    collect_internet = subparsers.add_parser(
+        "collect-internet-visual",
+        help="공개 HTTPS 이미지를 출처·권리 상태와 함께 뉴스 장면의 로컬 검토 자산으로 등록합니다.",
+    )
+    collect_internet.add_argument("--project-dir", required=True)
+    collect_internet.add_argument("--scene-id", required=True)
+    collect_internet.add_argument("--image-url", required=True, help="공개 HTTPS 직접 이미지 URL입니다.")
+    collect_internet.add_argument("--source-page", required=True, help="이미지 원본·기사의 canonical HTTPS 페이지입니다.")
+    collect_internet.add_argument("--query", default="", help="이미지 검색어 또는 수집 근거입니다.")
+    collect_internet.add_argument("--creator", default="")
+    collect_internet.add_argument("--publisher", default="")
+    collect_internet.add_argument("--attribution", default="")
+    collect_internet.add_argument(
+        "--permission-status",
+        choices=("unknown", "review_required", "owned", "licensed", "permission_confirmed"),
+        default="review_required",
+    )
+    collect_internet.add_argument("--permission-reference", default="")
+    collect_internet.add_argument(
+        "--relevance-level",
+        choices=tuple(sorted(ALLOWED_VISUAL_RELEVANCE_LEVELS)),
+        default="direct",
+    )
+    collect_internet.add_argument("--relevance-note", required=True)
+    collect_internet.add_argument("--confirm-news-relevance", action="store_true")
+    collect_internet.add_argument(
+        "--visual-locale",
+        help="한국 대응 자료는 ko-KR, 국제 실제사건 자료는 프로젝트 source_locale 또는 neutral입니다.",
+    )
+    collect_internet.add_argument(
+        "--confirm-korean-context",
+        action="store_true",
+        help="한국어 표지판·국내 도로·건축·차량 환경 등 한국 배경을 육안 확인했습니다.",
+    )
+    collect_internet.add_argument(
+        "--korean-context-note",
+        default="",
+        help="이미지가 한국 배경임을 보여주는 구체적인 시각 근거입니다.",
+    )
+    collect_internet.add_argument("--source-country", default="")
+    collect_internet.add_argument("--confirm-source-event-context", action="store_true")
+    collect_internet.add_argument(
+        "--source-event-context-note",
+        default="",
+        help="국제 실제사건의 장소·시점·행동이 장면과 맞는 구체적인 근거입니다.",
+    )
+    collect_internet.add_argument("--confirm-whiteboard-text-free", action="store_true")
+    collect_internet.add_argument("--output", help="프로젝트 내부 PNG 경로입니다.")
+    collect_internet.add_argument("--overwrite", action="store_true")
+    collect_internet.set_defaults(handler=cmd_collect_internet_visual)
+
+    prepare_whiteboard = subparsers.add_parser(
+        "prepare-whiteboard",
+        help="뉴스 장면의 실제 이미지·영상 프레임을 권리 상태를 상속한 whiteboard 프로젝트로 준비합니다.",
+    )
+    prepare_whiteboard.add_argument("--project-dir", required=True, help="news2shorts 프로젝트입니다.")
+    prepare_whiteboard.add_argument(
+        "--output-dir",
+        default="whiteboard-project",
+        help="뉴스 프로젝트 내부의 whiteboard 출력 폴더입니다.",
+    )
+    prepare_whiteboard.add_argument("--overwrite", action="store_true")
+    prepare_whiteboard.set_defaults(handler=cmd_prepare_whiteboard)
+
+    review_source_audio = subparsers.add_parser(
+        "review-source-audio",
+        help="source-video 장면의 음성을 전사해 예상 대사와 컷 경계를 검토합니다.",
+    )
+    review_source_audio.add_argument("--project-dir", required=True, help="프로젝트 디렉터리입니다.")
+    review_source_audio.add_argument(
+        "--scene-id",
+        action="append",
+        help="검토할 source-video 장면 ID입니다. 생략하면 모든 source-video 장면을 검사합니다.",
+    )
+    review_source_audio.add_argument(
+        "--backend",
+        choices=("auto", "openai-whisper-cli", "transcript-file"),
+        default="auto",
+        help="자동은 설치된 로컬 OpenAI Whisper CLI를 사용합니다.",
+    )
+    review_source_audio.add_argument(
+        "--transcript-file",
+        help="장면별 text와 선택적 segments를 담은 검토된 UTF-8 JSON 또는 단일 장면 텍스트입니다.",
+    )
+    review_source_audio.add_argument("--language", default="ko", help="Whisper 전사 언어입니다.")
+    review_source_audio.add_argument("--model", default="small", help="로컬 Whisper 모델 이름입니다.")
+    review_source_audio.add_argument(
+        "--model-dir",
+        default="~/.cache/whisper",
+        help="로컬 Whisper 모델 디렉터리입니다.",
+    )
+    review_source_audio.add_argument(
+        "--allow-model-download",
+        action="store_true",
+        help="지정한 로컬 Whisper 모델이 없을 때 다운로드를 허용합니다.",
+    )
+    review_source_audio.add_argument(
+        "--confirm-timing-reviewed",
+        action="store_true",
+        help="시간 정보 없는 전사 파일을 실제 영상과 청취 대조해 컷 경계를 확인했습니다.",
+    )
+    review_source_audio.set_defaults(handler=cmd_review_source_audio)
 
     render = subparsers.add_parser(
         "render",
@@ -7181,6 +11105,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     render.add_argument("--output", help="프로젝트 내부의 출력 파일명입니다.")
     render.add_argument("--overwrite", action="store_true", help="기존 출력 파일을 덮어씁니다.")
+    render.add_argument(
+        "--visual-mode",
+        choices=tuple(sorted(VISUAL_MODES)),
+        help="project.json에 기록된 시각 모드와 일치하는 렌더 모드입니다.",
+    )
+    render.add_argument(
+        "--whiteboard-project",
+        help="뉴스 프로젝트 내부의 준비된 whiteboard 프로젝트 경로입니다.",
+    )
+    render.add_argument(
+        "--confirm-whiteboard-review",
+        action="store_true",
+        help="whiteboard 장면 이미지와 annotation을 확인했음을 기록합니다.",
+    )
     render.add_argument(
         "--style",
         "--format",

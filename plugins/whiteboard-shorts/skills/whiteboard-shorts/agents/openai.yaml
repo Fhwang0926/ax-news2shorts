@@ -1,4 +1,0 @@
-interface:
-  display_name: "Whiteboard Shorts"
-  short_description: "CTA·업로드 정보가 있는 반전 자막 동물 쇼츠 제작"
-  default_prompt: "Use $whiteboard-shorts to turn my reviewed TikTok2Shorts animal project into a Korean whiteboard Short with verified music, a subscribe/like CTA, and YouTube upload information."

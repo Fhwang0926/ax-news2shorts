@@ -4,13 +4,39 @@
 
 ## 플러그인
 
-- [animal-viral-shorts](plugins/animal-viral-shorts): 별로여서 2026-08-26 Codex 설치에서 제거함. 저장소 소스는 참고용으로 유지
-- [`news2shorts`](plugins/news2shorts): 검증된 뉴스 기반 쇼츠 제작
-- [`tiktok2shorts`](plugins/tiktok2shorts): 검증된 TikTok 동물 후보 비교와 감정 해설형 로컬 쇼츠 제작
-- [`whiteboard-shorts`](plugins/whiteboard-shorts): 선택·검토된 TikTok2Shorts 원본을 출처 근거가 연결된 로컬 손그림 애니메이션으로 렌더링
-- [`healing2shorts`](plugins/healing2shorts): 승인된 음식 영상과 익명·창작 사연을 결합한 내레이션형 힐링 쇼츠 제작
-- [`s-finder`](plugins/s-finder): 해외 바이럴 원본과 한국 중복도를 조사해 제작 후보를 비교
-- [`shorts-studio`](plugins/shorts-studio): 승인된 로컬 입력으로 이야기·연애 2인극·가격해부 쇼츠를 제작하고 편집·업로드 패키지 생성
+| 플러그인 | 주요 용도 | 기본 안전 경계 |
+| --- | --- | --- |
+| [`news2shorts`](plugins/news2shorts) | 검증된 한국어 뉴스로 쇼츠·자막·편집 패키지 제작 | 출처·권리·합성 콘텐츠 검토 전 게시 차단 |
+| [`cc-helper`](plugins/cc-helper) | 최근 이슈 조사, 15장면 자산 수집, 편집 가능한 CapCut 초안 인계 | 최종 렌더·업로드·게시를 수행하지 않음 |
+| [`shorts-suite`](plugins/shorts-suite) | Whiteboard·Senior·동물·힐링·로맨스·영어권 재구성을 5단계 승인 흐름으로 통합 | 소스·대본·이미지·음성·렌더를 자동 선택하거나 건너뛰지 않음 |
+| [`careerfill`](plugins/careerfill) | 로컬 문서·Notion 근거와 지원서 화면을 교차분석하고 승인된 필드 입력 | 원본·Notion 수정과 첨부·동의·저장·제출을 별도 승인 없이 수행하지 않음 |
+
+## 설치
+
+Codex 플러그인 명령을 사용할 수 있는 환경에서 저장소를 받은 뒤 루트 디렉터리에서 로컬 마켓플레이스를 등록합니다.
+
+```bash
+codex plugin marketplace add .
+```
+
+필요한 플러그인만 선택해 설치할 수 있습니다.
+
+```bash
+codex plugin add news2shorts@news2shorts-local
+codex plugin add cc-helper@news2shorts-local
+codex plugin add shorts-suite@news2shorts-local
+codex plugin add careerfill@news2shorts-local
+```
+
+설치·활성화 상태는 다음 명령으로 확인합니다.
+
+```bash
+codex plugin list
+```
+
+설치 또는 업데이트 후에는 새 Codex 작업을 시작해야 변경된 Skill과 도구가 반영됩니다. Python·FFmpeg·CapCut·브라우저 연결·외부 API 등 플러그인별 선택 의존성과 실행 제한은 각 플러그인 폴더의 문서를 따릅니다. API 키와 토큰은 저장소에 기록하지 않고 환경 변수나 운영체제 보안 저장소로만 전달합니다.
+
+## 주요 기능
 
 `news2shorts` MVP는 다음 흐름을 지원합니다.
 
@@ -24,6 +50,6 @@
 
 `news2shorts`는 모든 새 영상 앞에 실제 뉴스한면 채널 로고와 고정 슬로건이 들어간 3.15초 공통 인트로를 붙이고 0.25초 전환 뒤 뉴스 본편을 시작하며, 본편 결론 뒤에는 짧은 CTA 샷을 한 번 붙입니다. 결론은 확인된 답·실질 의미·마지막 붙잡기를 분리해 크게 보여주고, Typecast 전달 프리셋으로 해당 장면의 고저와 속도를 제한적으로 조절합니다. CTA는 민감도와 결론 질문을 검토한 뒤 구독·좋아요형 또는 `여러분의 생각을 댓글로 남겨주세요` 댓글형을 선택하며, 같은 프로젝트에서는 선택이 유지됩니다. 렌더 결과와 함께 외부 편집용 `edit-package`와 YouTube 업로드 정보, 권리 승인 장면 이미지 2~3장을 합성한 별도 썸네일과 우선 태그 최대 2개가 붙은 제목도 만듭니다. 제목·설명·태그·썸네일·고정 댓글·업로드 설정을 제공하되 계정·정책 판단이 필요한 값과 권리는 검토 대상으로 남깁니다.
 
-각 플러그인의 실행 방법과 제한 사항은 해당 폴더의 `README.md`를 참고하세요.
+각 플러그인의 실행 방법과 제한 사항은 해당 폴더의 문서를 참고하세요.
 
 DB와 웹 UI는 MVP 범위에 포함되지 않습니다. 플러그인은 YouTube 제목·설명·태그·썸네일과 설정 정보를 제공하지만 실제 업로드는 수행하지 않습니다.

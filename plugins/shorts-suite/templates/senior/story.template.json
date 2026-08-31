@@ -1,0 +1,62 @@
+{
+  "title": "",
+  "hook": "",
+  "selected_hook_id": "",
+  "target_age": "55-75",
+  "target_duration": 55,
+  "fictionalization": "fictionalized",
+  "characters": [
+    {
+      "id": "main_001",
+      "name": "",
+      "age": 70,
+      "gender": "",
+      "appearance": "",
+      "hair": "",
+      "clothes": "",
+      "personality": ""
+    }
+  ],
+  "hooks": [
+    {
+      "id": "hook_a",
+      "text": "",
+      "scores": {"curiosity": 0, "emotion": 0, "conflict": 0, "clarity": 0, "spoiler_control": 0},
+      "total": 0
+    },
+    {
+      "id": "hook_b",
+      "text": "",
+      "scores": {"curiosity": 0, "emotion": 0, "conflict": 0, "clarity": 0, "spoiler_control": 0},
+      "total": 0
+    },
+    {
+      "id": "hook_c",
+      "text": "",
+      "scores": {"curiosity": 0, "emotion": 0, "conflict": 0, "clarity": 0, "spoiler_control": 0},
+      "total": 0
+    },
+    {
+      "id": "hook_d",
+      "text": "",
+      "scores": {"curiosity": 0, "emotion": 0, "conflict": 0, "clarity": 0, "spoiler_control": 0},
+      "total": 0
+    },
+    {
+      "id": "hook_e",
+      "text": "",
+      "scores": {"curiosity": 0, "emotion": 0, "conflict": 0, "clarity": 0, "spoiler_control": 0},
+      "total": 0
+    }
+  ],
+  "scenes": [
+    {"scene": 1, "role": "hook", "duration": 4, "narration": "", "subtitle": "", "highlight": [], "characters": [], "visual_prompt": "", "emotion": "tension", "motion": "slow_zoom_in", "video_mode": "ken_burns"},
+    {"scene": 2, "role": "character_intro", "duration": 7, "narration": "", "subtitle": "", "highlight": [], "characters": [], "visual_prompt": "", "emotion": "warm", "motion": "pan_right", "video_mode": "ken_burns"},
+    {"scene": 3, "role": "incident", "duration": 7, "narration": "", "subtitle": "", "highlight": [], "characters": [], "visual_prompt": "", "emotion": "mystery", "motion": "pan_left", "video_mode": "ken_burns"},
+    {"scene": 4, "role": "conflict", "duration": 7, "narration": "", "subtitle": "", "highlight": [], "characters": [], "visual_prompt": "", "emotion": "tension", "motion": "slow_zoom_in", "video_mode": "ken_burns"},
+    {"scene": 5, "role": "escalation", "duration": 8, "narration": "", "subtitle": "", "highlight": [], "characters": [], "visual_prompt": "", "emotion": "sad", "motion": "zoom_face", "video_mode": "ken_burns"},
+    {"scene": 6, "role": "pre_reveal", "duration": 7, "narration": "", "subtitle": "", "highlight": [], "characters": [], "visual_prompt": "", "emotion": "mystery", "motion": "pan_up", "video_mode": "ken_burns"},
+    {"scene": 7, "role": "reveal", "duration": 8, "narration": "", "subtitle": "", "highlight": [], "characters": [], "visual_prompt": "", "emotion": "shock", "motion": "slow_zoom_in", "video_mode": "ken_burns"},
+    {"scene": 8, "role": "afterglow", "duration": 7, "narration": "", "subtitle": "", "highlight": [], "characters": [], "visual_prompt": "", "emotion": "warm", "motion": "slow_zoom_out", "video_mode": "ken_burns"}
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "locale": "en-US",
+  "angles": [],
+  "selected_angle_id": "",
+  "titles": [],
+  "selected_title": "",
+  "title_lines": ["", ""],
+  "hooks": [],
+  "selected_hook_id": "",
+  "selection_reasons": {
+    "angle": "",
+    "title": "",
+    "hook": ""
+  },
+  "script_paragraphs": [],
+  "script_text": ""
+}

@@ -1,0 +1,6 @@
+interface:
+  display_name: "CareerFill 자료 설정"
+  short_description: "경력 문서를 출처가 연결된 검토용 인덱스로 정리합니다."
+  default_prompt: "Use $careerfill-setup to configure my CareerVault and review its source-linked claims without changing the original files."
+policy:
+  allow_implicit_invocation: true

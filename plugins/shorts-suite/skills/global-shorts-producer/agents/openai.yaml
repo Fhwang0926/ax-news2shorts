@@ -1,0 +1,4 @@
+interface:
+  display_name: "Global Shorts Producer"
+  short_description: "Discover Brainbulb Shorts and draft original English Shorts"
+  default_prompt: "Use $global-shorts-producer to show three Brainbulb Shorts candidates and wait for my selection."

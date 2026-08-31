@@ -1,5 +1,5 @@
 {
-  "version": 13,
+  "version": 17,
   "title": "",
   "slug": "",
   "topic": "",
@@ -8,9 +8,10 @@
   "created_at": "",
   "updated_at": "",
   "status": "initialized",
-  "target_duration_seconds": 30,
+  "target_duration_seconds": 20,
   "sensitive_topic": false,
   "delivery_mode": "continuous-flow",
+  "narration_style": "standard",
   "format_selection": {
     "mode": "auto",
     "selected": "",
@@ -34,6 +35,8 @@
     "open_loop": "",
     "midpoint_rehook": "",
     "early_rehook_scene_id": "",
+    "first_answer_scene_id": "",
+    "truth_guard_scene_id": "",
     "withheld_detail": "",
     "truth_guard": "",
     "payoff": "",
@@ -54,6 +57,7 @@
     }
   },
   "visual_style": {
+    "render_mode": "standard",
     "template": "quick-reveal",
     "brand_name": "",
     "accent_color": "#FFF200",
@@ -66,8 +70,31 @@
     "show_source_label": true
   },
   "visual_sourcing": {
+    "mode": "standard",
     "web_search_enabled": true,
     "prefer_collected_assets": true,
+    "prefer_current_news_and_community_visuals": true,
+    "source_priority": [
+      "current-news-article",
+      "public-community-post",
+      "official-primary-media",
+      "licensed-media-library",
+      "generated-fallback"
+    ],
+    "allow_unreviewed_news_community_draft": true,
+    "community_visual_privacy_review_required": true,
+    "korean_visuals_required": true,
+    "visual_locale": "ko-KR",
+    "foreign_visual_fallback": "blocked",
+    "korean_context_review_required": true,
+    "international_source_visuals": {
+      "enabled": false,
+      "source_country": "",
+      "source_locale": "",
+      "actual_event_only": true,
+      "rights_review_required": true,
+      "citizen_stake": ""
+    },
     "generation_fallback": true,
     "real_news_photo_required": true,
     "visual_quality_review_required": true,
@@ -76,22 +103,71 @@
       "mentions_reviewed": false,
       "companies": []
     },
+    "hot_real_news": {
+      "enabled": false,
+      "max_age_hours": 24,
+      "min_recent_6h_source_count": 2,
+      "allow_unreviewed_local_draft": true
+    },
+    "whiteboard": {
+      "enabled": false,
+      "renderer": "whiteboard-shorts",
+      "project_dir": "whiteboard-project",
+      "source_rights_inherited": true
+    },
+    "min_real_media_ratio": 0.6,
     "max_generated_scene_ratio": 0.4,
     "generated_image_size": "720x1280",
-    "generated_style": "editorial-realism-or-pictogram"
+    "generated_style": "korean-editorial-realism"
   },
   "brand_intro": {
     "enabled": true,
+    "mode": "corner-logo",
     "asset": "news-hanmyeon-channel",
+    "position": "top-left",
     "transition": "fadeblack",
     "transition_duration": 0.25
   },
+  "audio_bed": {
+    "enabled": false,
+    "mode": "none",
+    "profile": "",
+    "vocals": false,
+    "path": ""
+  },
+  "mid_cta": {
+    "mode": "auto",
+    "placement": "after-auto-rehook",
+    "min_duration": 1.5,
+    "max_duration": 2.0,
+    "style": "pity-native-arrow",
+    "voice_enabled": true,
+    "voice_delivery": "verdict",
+    "sfx_enabled": true,
+    "ui_target_profile": "youtube-shorts-mobile",
+    "arrow_target": {
+      "x": 0.34,
+      "y": 0.86
+    },
+    "ordinary_copy": {
+      "headline": "보고 계신데...",
+      "emphasis": "구독은 아직이네요",
+      "subline": "채널명 옆 구독, 한 번만",
+      "narration": "구독은 아직이네요."
+    },
+    "sensitive_copy": {
+      "headline": "잠깐만요",
+      "emphasis": "구독은 아직",
+      "subline": "채널명 옆 구독, 한 번만",
+      "narration": "구독 한 번만 부탁드려요."
+    }
+  },
   "cta_tail": {
     "enabled": true,
-    "duration": 4.0,
+    "duration": 2.0,
     "headline": "빠른 소식 계속",
     "prompt": "구독 · 좋아요",
-    "narration": "구독과 좋아요 누르면, 빠른 소식 전해드릴게요.",
+    "narration": "다음 소식도 바로 전해드릴게요.",
     "comment_headline": "여러분의 판단",
     "comment_prompt": "댓글로 한마디",
     "comment_narration": "여러분의 생각을 댓글로 남겨주세요.",

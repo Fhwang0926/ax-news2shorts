@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "careerfill-local": {
+      "cwd": ".",
+      "command": "python3",
+      "args": [
+        "./mcp/server.py"
+      ]
+    }
+  }
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Whiteboard Shorts"
+  short_description: "기존 Whiteboard 프로젝트를 호환 명령으로 재개·검증합니다"
+  default_prompt: "Use $whiteboard-shorts to resume and validate my existing legacy Whiteboard Shorts project."

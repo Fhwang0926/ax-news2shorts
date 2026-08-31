@@ -1,0 +1,4 @@
+interface:
+  display_name: "Animal Shorts Producer"
+  short_description: "관찰 대상·행동 대비와 한국어 의역·효과음이 있는 동물 쇼츠를 만듭니다."
+  default_prompt: "$animal-shorts-producer로 검증된 동물 후보를 최대 3개 비교하고, 선택 후 관찰 근거가 있는 한국어 쇼츠를 만들어줘."

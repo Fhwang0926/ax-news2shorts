@@ -33,7 +33,7 @@ For a bolder, referral-worthy opening, make the subject and feared consequence i
 
 ## Ten-second retention contract
 
-Assume many viewers decide whether to leave before 10 seconds. Count from the first frame of the fixed intro, not from the first news scene.
+Assume many viewers decide whether to leave before 10 seconds. Count from the actual output's first frame; version 16+ begins with content, while legacy projects include their stored intro.
 
 - Keep the first news hook scene at 2.5 seconds or less.
 - Start the designated `early_rehook_scene_id` by 10.0 seconds including the intro. It must be an `evidence`, `turn`, `impact`, or `rehook` beat linked to at least one verified claim.
@@ -47,7 +47,7 @@ Assume many viewers decide whether to leave before 10 seconds. Count from the fi
 ### `quick-reveal`
 
 - 0-1s: a concrete citizen question built from the result, contradiction, or A/B comparison.
-- By 10s including the fixed intro: one verified partial reveal or interpretation change.
+- By 10s from the output first frame: one verified partial reveal or interpretation change.
 - Next: only the minimum context needed to understand the remaining gap.
 - Middle: decisive evidence or reversal.
 - 18-30s: answer and consequence.
@@ -90,9 +90,13 @@ When accurate candidates are close, prefer the one with the clearest issue tensi
 
 Record the selected hook, its open loop, the midpoint rehook, `early_rehook_scene_id`, `withheld_detail`, `truth_guard`, and the final payoff in `project.json.shorts_profile`. The hook earns attention; the payoff must justify it with a verified answer, cause, consequence, or meaning that was not already stated. Reject a conclusion that only paraphrases the hook, repeats its number, restates the persistent headline, or ends with an abstract phrase such as `지켜봐야 합니다` or `변화가 시작됩니다`. State the verified current answer and then its consequence or the exact condition that comes next.
 
+The conclusion may end with one new, supported discussion question. Keep that question for the comment CTA instead of showing it twice. More importantly, do not repeat a complete earlier subtitle or amount line in `payoff_title`, `payoff_detail`, or `payoff_punch`; convert the close into a new action, condition, consequence, or viewer check. For already-effective policy, use durable status copy such as `현재 시행 중` when the exact day is not the story. Relative phrases such as `다음 달부터` are valid only when the planned publication date makes them true.
+
 ## Dialogue relay
 
 Write narration as one conversation carried across scenes, not as isolated news bullets. Each new beat must briefly answer, challenge, or sharpen the previous beat before handing one unanswered point to the next. Use natural spoken connectors such as `잠깐`, `그럼`, `그런데`, `즉`, or `결론은` only where the logic needs them; do not repeat the same connector mechanically.
+
+`narration_style` controls only the spoken surface. `standard` preserves the existing news narration. `cc-helper-conversational` keeps the same verified claim links and retention structure but sounds like one friend explaining the sequence: avoid formal `합니다`, `했습니다`, and `입니다` endings, and vary factual connectives such as `였고`, `나왔음`, `했지만`, and `이었는데`. Do not repeat `~데/~는데` on adjacent narrated scenes or finish the last two narrated scenes with `~함`. A source-video scene keeps its verified dialogue verbatim and is excluded from this ending check. This style never imports cc-helper's permission for inferred intent, exaggeration, metaphor, slang, blame, or unsupported reaction language. Sensitive news stays restrained, clear, and literal.
 
 In storyboard version 4+, externalize that logic in `story_link`: the hook writes `next_gap`, middle beats write both `answers` and `next_gap`, and the payoff writes `answers` with an empty `next_gap`. These fields are editorial metadata and never appear on screen.
 
@@ -104,11 +108,11 @@ In storyboard version 4+, externalize that logic in `story_link`: the hook write
 - Read the full narration aloud in sequence. Rewrite noun lists, abrupt topic jumps, and consecutive sentences that could be rearranged without changing the story.
 - Keep humor in the phrasing and reversal. Never trade factual conditions, victim sensitivity, or source meaning for a punchline.
 
-For a 30-second Typecast Short, normally keep the full narration near 170-190 non-whitespace characters. Estimate runtime before synthesis, then use the draft `render-report.json` as the source of truth. Shorten repeated setup before increasing tempo. A requested 3-second scene that Typecast expands to 7 seconds is a 7-second shot and must be rewritten or split.
+For a 20-second Typecast Short, keep narration compact enough to preserve the planned scene order. Estimate runtime before synthesis, then use the draft `render-report.json` as the source of truth. Shorten repeated setup before increasing tempo. A requested 3-second scene that Typecast expands to 7 seconds is a 7-second shot and must be rewritten or split.
 
 ## Visual rhythm
 
-- Start content on the first frame; omit a logo intro.
+- Start content on the first frame. Version 16 uses the small top-left channel logo without a separate intro; legacy projects may retain their stored full-screen intro.
 - Use one claim per scene.
 - Change composition at semantic beats, normally every 2-4 seconds. Let a shot run longer only when the viewer must read or verify something in-frame.
 - Use motion footage where it materially proves or explains the claim. Version 4 stills default to `none`. Use `zoom-in` toward one named emphasis or `zoom-out` for a context reveal, with explicit focal coordinates, `motion_start`, `motion_duration`, and `motion_emphasis`. For a primary person photo, use a face-centered `zoom-in` and about `1.10`-`1.16` `zoom_scale` only when that person is spoken.
@@ -132,6 +136,8 @@ For location-led reporting, the first context scene must say the actual verified
 Make the last non-loop scene the payoff and give it a visible, self-contained conclusion card plus a complete narration close. Visible editorial copy is not narration: write `payoff_title`, `payoff_detail`, `payoff_punch`, captions, and headlines as compact noun phrases. Build the close as three distinct jobs: the verified answer, the verified response or consequence, and a final retention punch that challenges the concrete citizen burden or contradiction. Do not turn non-central unknowns into final-card copy, and reject generic endings such as `미확인`, `확인 중`, `아직 없음`, or `지켜봐야`. Preserve any truth-changing qualifier earlier in narration or `truth_guard`, but finish on what the confirmed facts let a citizen question sharply. Do not use the punch for another summary, generic suspense, insults, or unsupported blame. When a discussion question is justified, keep `discussion_prompt` noun-led and short; a version 6 punch occupies the conclusion card's final zone while the question carries into the later comment CTA.
 
 In narration, state the sourced factual answer first and then speak the punch as a separate second beat. If the facts support a concrete contradiction, accountability question, or disputed judgment, a brief contextual challenge may follow. Use `voice_delivery: "verdict"` for a lower, slower factual payoff, especially on sensitive or preliminary reporting. Use `voice_delivery: "contrast"` only for a safe, supported reversal or challenge. These profiles use documented Typecast presets plus restrained pitch and tempo changes; they do not provide word-level emphasis. Never use shouting, insults, unsupported accusations, an angry preset, or an upbeat challenge that exploits victims. Never replace the verified payoff with a bare question or invent consensus. Read the hook and payoff back to back before rendering; if the payoff sounds like the same sentence rewritten, replace it with the missing answer or consequence. For a preliminary or ongoing story, name the current status and the exact event required before the claimed effect can occur.
+
+For reporting about enforcement or removal, preserve the shortest truthful escalation path. A useful viewer action can say `관리자에게 알림`, followed by `이동 권고 불응 시 지자체 견인 요청 가능`. Do not collapse that path into `신고하면 바로 견인` unless the cited rule explicitly authorizes immediate towing.
 
 - End early beats with forward motion such as “그런데 숫자는 달랐습니다” only when the next scene immediately supplies that number.
 - Place the strongest new proof or interpretation change around 40-65% of runtime.

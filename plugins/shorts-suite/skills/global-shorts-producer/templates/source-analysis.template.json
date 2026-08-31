@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "video_id": "",
+  "source_url": "",
+  "transcript_available": false,
+  "topic": {
+    "summary": "",
+    "who": "",
+    "event": "",
+    "cause": "",
+    "result": "",
+    "controversy": "",
+    "viral_reason": "",
+    "origin": "UNKNOWN"
+  },
+  "structure": {
+    "hook": "",
+    "context": "",
+    "problem": "",
+    "twist": "",
+    "reaction": "",
+    "ending": ""
+  },
+  "source_claim_order": [],
+  "source_beat_order": [],
+  "sensitive_topic": false,
+  "sensitive_reasons": [],
+  "global_score_input": {
+    "features": {
+      "visual_impact": {"score": 0, "reason": ""},
+      "curiosity": {"score": 0, "reason": ""},
+      "universal_understanding": {"score": 0, "reason": ""},
+      "korea_uniqueness": {"score": 0, "reason": ""},
+      "emotion": {"score": 0, "reason": ""},
+      "surprise": {"score": 0, "reason": ""},
+      "freshness": {"score": 0, "reason": ""}
+    },
+    "penalties": {
+      "korean_person_only": {"applied": false, "reason": ""},
+      "domestic_politics_context": {"applied": false, "reason": ""},
+      "background_knowledge_required": {"applied": false, "reason": ""},
+      "already_global_viral": {"applied": false, "reason": ""},
+      "facts_unverifiable": {"applied": false, "reason": ""}
+    }
+  },
+  "updated_at": ""
+}
