@@ -164,6 +164,7 @@
   },
   "cta_tail": {
     "enabled": true,
+    "keep_after_mid_cta": false,
     "duration": 2.0,
     "headline": "빠른 소식 계속",
     "prompt": "구독 · 좋아요",

@@ -565,6 +565,7 @@ DEFAULT_COMMENT_CTA_FALLBACK_NARRATION = (
 )
 CTA_TAIL_VARIANTS = ("subscribe", "comment")
 CTA_TAIL_SELECTION_STRATEGY = "sensitive-safe+discussion-fit+stable-50-50"
+CTA_TAIL_AFTER_MID_SELECTION_STRATEGY = "explicit-final-cta-after-mid-v1"
 CTA_TAIL_DEFAULT_DISTRIBUTION = "Subscribe 50% / Comment 50%"
 CTA_TAIL_DEFAULT_DISTRIBUTION_BASIS = "project-stable-sha256"
 MID_CTA_MODES = {"auto", "enabled", "disabled"}
@@ -5362,6 +5363,8 @@ def validate_project(project_dir: Path, *, final: bool) -> tuple[list[str], list
         else:
             if cta_tail.get("enabled") is not True:
                 target.append("새 프로젝트의 공통 참여 CTA 테일은 enabled=true여야 합니다.")
+            if not isinstance(cta_tail.get("keep_after_mid_cta", False), bool):
+                errors.append("cta_tail.keep_after_mid_cta는 true 또는 false여야 합니다.")
             try:
                 cta_duration = float(cta_tail.get("duration") or 0.0)
                 if not MIN_CTA_TAIL_DURATION <= cta_duration <= MAX_CTA_TAIL_DURATION:
@@ -7958,6 +7961,29 @@ def select_cta_tail_variant(project: dict, storyboard: dict) -> dict:
     }
 
 
+def select_tail_after_mid_cta(
+    project: dict,
+    storyboard: dict,
+    mid_cta_report: dict,
+) -> dict:
+    config = project.get("cta_tail")
+    if not isinstance(config, dict) or config.get("keep_after_mid_cta") is not True:
+        return brand_close_selection(mid_cta_report)
+    selection = select_cta_tail_variant(project, storyboard)
+    if selection.get("enabled") is not True:
+        return selection
+    selection.update(
+        {
+            "selection_strategy": CTA_TAIL_AFTER_MID_SELECTION_STRATEGY,
+            "selection_reason": (
+                "사용자가 중간 구독 CTA와 별도의 마지막 CTA를 모두 요청해 함께 유지합니다."
+            ),
+            "mid_cta_insert_after_scene_id": mid_cta_report.get("insert_after_scene_id"),
+        }
+    )
+    return selection
+
+
 def create_cta_audio(path: Path, duration: float) -> None:
     run_command(
         [
@@ -10020,7 +10046,11 @@ def cmd_render(args: argparse.Namespace) -> int:
                     float(report_item.get("timeline_end") or 0.0) + mid_duration,
                     3,
                 )
-            cta_selection = brand_close_selection(mid_cta_report)
+            cta_selection = select_tail_after_mid_cta(
+                project,
+                storyboard,
+                mid_cta_report,
+            )
         else:
             mid_cta_report = mid_cta_selection
 
@@ -10566,7 +10596,12 @@ def cmd_validate(args: argparse.Namespace) -> int:
                         errors.append("visual-first 최종 CTA는 무음이어야 합니다.")
                     if project_version >= 8:
                         cta_variant = str(cta_report.get("variant") or "")
-                        if project_version >= 17 and mid_cta_rendered:
+                        cta_config = project.get("cta_tail")
+                        keep_tail_after_mid = (
+                            isinstance(cta_config, dict)
+                            and cta_config.get("keep_after_mid_cta") is True
+                        )
+                        if project_version >= 17 and mid_cta_rendered and not keep_tail_after_mid:
                             if cta_variant != "brand-close":
                                 errors.append("중간 CTA가 있으면 최종 CTA는 brand-close여야 합니다.")
                             if cta_duration > BRAND_CLOSE_DURATION + 0.01:
@@ -10576,7 +10611,12 @@ def cmd_validate(args: argparse.Namespace) -> int:
                         else:
                             if cta_variant not in CTA_TAIL_VARIANTS:
                                 errors.append("최종 렌더의 CTA variant가 subscribe 또는 comment가 아닙니다.")
-                            if str(cta_report.get("selection_strategy") or "") != CTA_TAIL_SELECTION_STRATEGY:
+                            expected_cta_strategy = (
+                                CTA_TAIL_AFTER_MID_SELECTION_STRATEGY
+                                if mid_cta_rendered and keep_tail_after_mid
+                                else CTA_TAIL_SELECTION_STRATEGY
+                            )
+                            if str(cta_report.get("selection_strategy") or "") != expected_cta_strategy:
                                 errors.append("최종 렌더의 CTA 자동 선택 전략 기록이 없습니다.")
                             if project.get("sensitive_topic") is True and cta_variant != "subscribe":
                                 errors.append("민감 뉴스의 최종 CTA는 subscribe여야 합니다.")

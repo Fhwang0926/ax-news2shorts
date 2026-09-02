@@ -280,6 +280,29 @@ class RetentionV16Tests(unittest.TestCase):
         self.assertEqual(selection["duration"], MODULE.BRAND_CLOSE_DURATION)
         self.assertFalse(selection["voice_enabled"])
 
+    def test_explicit_final_cta_is_preserved_after_mid_cta(self) -> None:
+        project = {
+            "sensitive_topic": True,
+            "cta_tail": {
+                "enabled": True,
+                "keep_after_mid_cta": True,
+                "headline": "세금 11억이 아깝다면",
+                "prompt": "좋아요 눌러주세요",
+                "narration": "세금 11억이 아깝다면 좋아요 눌러주세요.",
+            },
+        }
+        selection = MODULE.select_tail_after_mid_cta(
+            project,
+            {"scenes": []},
+            {"insert_after_scene_id": "scene-04"},
+        )
+        self.assertEqual(selection["variant"], "subscribe")
+        self.assertEqual(selection["prompt"], "좋아요 눌러주세요")
+        self.assertEqual(
+            selection["selection_strategy"],
+            MODULE.CTA_TAIL_AFTER_MID_SELECTION_STRATEGY,
+        )
+
     def test_source_dialogue_match_detects_missing_tail(self) -> None:
         match = MODULE.source_dialogue_match(
             "저기요. 경찰이에요, 경찰.",

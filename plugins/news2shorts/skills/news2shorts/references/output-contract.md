@@ -109,7 +109,7 @@ Version 17 adds a user-configurable middle CTA. `auto` is the new-project defaul
 }
 ```
 
-The renderer inserts the middle CTA only for a continuous-flow news body at least 20 seconds long and only after the `rehook` or `turn` boundary nearest 50% within the 40-60% window. It records the selected boundary, normalized UI target, actual Typecast duration, and generated SFX in `render-report.json`. The visual arrow points toward the lower-left Shorts channel area without drawing a fake clickable button. No middle-CTA SRT cue is generated. When the middle CTA renders, the ordinary two-second subscribe/comment tail becomes a 0.8-second voice-free brand close; otherwise the version 16 tail behavior remains.
+The renderer inserts the middle CTA only for a continuous-flow news body at least 20 seconds long and only after the `rehook` or `turn` boundary nearest 50% within the 40-60% window. It records the selected boundary, normalized UI target, actual Typecast duration, and generated SFX in `render-report.json`. The visual arrow points toward the lower-left Shorts channel area without drawing a fake clickable button. No middle-CTA SRT cue is generated. When the middle CTA renders, the ordinary two-second subscribe/comment tail becomes a 0.8-second voice-free brand close by default. When the user explicitly requests a separate final CTA, set `cta_tail.keep_after_mid_cta: true`; the renderer must preserve both the middle CTA and the configured final CTA instead of disabling either one. Otherwise the version 16 tail behavior remains.
 
 Version 7 through 15 use the mandatory pre-news intro. The renderer supplies the legacy defaults to older projects that omit the object, so rerendering them keeps the same clip:
 

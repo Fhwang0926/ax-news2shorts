@@ -29,6 +29,7 @@ Discovery is an intermediate step, not the completed production result.
 - If the user explicitly said `후보만`, `조사만`, or an equivalent phrase, return all ten verified candidates and stop without pushing production.
 - If a single URL or topic and a production scope were already explicit, do not ask the same questions again.
 - For video scope, accept `중간 CTA 자동`, `중간 CTA 포함`, and `중간 CTA 제외` as user settings and map them to `mid_cta.mode: auto`, `enabled`, and `disabled`. Default to `auto` when the user does not mention it; never override an explicit exclusion.
+- Never disable or remove an `auto` or `enabled` middle CTA merely because the user also requests a final CTA. Preserve the middle CTA and set `cta_tail.keep_after_mid_cta: true` so the explicit final CTA renders after it. Use the 0.8-second brand close only when no separate final CTA was explicitly requested.
 - For continuous-flow narration, accept `cc_helper 말투`, `cc-helper 말투`, or `친구 설명형` as a user setting and map it to `narration_style: "cc-helper-conversational"`. The default remains `standard`. Visual-first has no narration and cannot use this style.
 - After the required topic and scope are confirmed, continue with quick-reveal continuous-flow without extra approval prompts unless blocked by missing rights, conflicting facts, a sensitive topic, or final-render approval.
 - Politics, elections, disasters, crime, health, finance, war, and stories involving minors always require guided review before a final render.
